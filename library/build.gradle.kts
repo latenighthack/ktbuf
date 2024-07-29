@@ -4,11 +4,12 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
-    id("module.publication")
+    id("com.vanniktech.maven.publish.base")
 }
 
 kotlin {
-    jvm()
+    jvm {
+    }
     js {
         browser()
     }
@@ -50,5 +51,35 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
+    }
+}
+
+mavenPublishing {
+    coordinates("com.latenighthack.ktbuf", "ktbuf-library", "1.0.0")
+
+    pom {
+        name.set("KtBuf")
+        description.set("A native Kotlin implementation of protocol buffers")
+        inceptionYear.set("2024")
+        url.set("https://github.com/latenighthack/ktbuf/")
+        licenses {
+            license {
+                name.set("The Apache License, Version 2.0")
+                url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                distribution.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+            }
+        }
+        developers {
+            developer {
+                id.set("mproberts")
+                name.set("Mike Roberts")
+                url.set("https://github.com/mproberts/")
+            }
+        }
+        scm {
+            url.set("https://github.com/latenighthack/ktbuf/")
+            connection.set("scm:git:git://github.com/latenighthack/ktbuf.git")
+            developerConnection.set("scm:git:ssh://git@github.com/latenighthack/ktbuf.git")
+        }
     }
 }
