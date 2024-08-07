@@ -1,5 +1,6 @@
 package com.latenighthack.ktbuf.rpc
 
+import com.latenighthack.ktbuf.net.*
 import com.latenighthack.ktbuf.proto.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -16,13 +17,14 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class, DelicateCoroutinesApi::class)
-public class OkHttpRpcClient(private val serverPath: String, private val client: OkHttpClient) : RpcClient {
+actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
+    private val client: OkHttpClient = OkHttpClient()
 
-    override suspend fun unaryCall(
-        method: RpcClient.MethodSpecifier,
+    actual override suspend fun unaryCall(
+        method: RpcMethodSpecifier,
         headers: Map<String, String>,
         request: ByteArray
-    ): RpcClient.Response {
+    ): RpcResponse {
         return suspendCancellableCoroutine { continuation ->
             val unaryRequest = Request.Builder()
                 .url(method.toPath("https://$serverPath"))
@@ -46,9 +48,9 @@ public class OkHttpRpcClient(private val serverPath: String, private val client:
                     if (response.code > 299 || response.code < 200) {
                         val errorMessage = response.body!!.string()
                         val status = Status.fromHTTPCode(response.code, errorMessage)
-                        continuation.resumeWithException(RpcClient.ResponseException(method.toPath(""), "POST", status.code, status.message, RuntimeException(errorMessage)))
+                        continuation.resumeWithException(RpcResponseException(method.toPath(""), "POST", status.code, status.message, RuntimeException(errorMessage)))
                     } else {
-                        continuation.resume(RpcClient.Response(response.body!!.bytes(), response.headers.toMap()))
+                        continuation.resume(RpcResponse(response.body!!.bytes(), response.headers.toMap()))
                     }
 
                     response.closeQuietly()
@@ -75,7 +77,7 @@ public class OkHttpRpcClient(private val serverPath: String, private val client:
         }
     }
 
-    private class StreamContext : RpcClient.ServerStream {
+    private class StreamContext : RpcServerStream {
         val inbound = Channel<ByteArray>()
         val outbound = Channel<ByteArray>(1)
 
@@ -88,9 +90,9 @@ public class OkHttpRpcClient(private val serverPath: String, private val client:
         }
     }
 
-    override suspend fun serverStreamingCall(
-        method: RpcClient.MethodSpecifier,
-        block: suspend RpcClient.ServerStream.() -> Unit
+    actual override suspend fun serverStreamingCall(
+        method: RpcMethodSpecifier,
+        block: suspend RpcServerStream.() -> Unit
     ) {
         var globalException: Throwable? = null
         val context = StreamContext()
@@ -133,7 +135,7 @@ public class OkHttpRpcClient(private val serverPath: String, private val client:
 
                 // todo: needs testing (this might not be onClosed with error)
                 val status = Status.fromWSCode(statusCode, "")
-                val error = CancellationException("${statusCode}", RpcClient.ResponseException(method.toPath(""), "WS", status.code, response?.message ?: "", t))
+                val error = CancellationException("${statusCode}", RpcResponseException(method.toPath(""), "WS", status.code, response?.message ?: "", t))
 
                 context.inbound.cancel(error)
                 context.outbound.cancel(error)

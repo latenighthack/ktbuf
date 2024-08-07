@@ -31,6 +31,16 @@ enum class Codes(val value: Int) {
         UNAVAILABLE -> true
         else -> false
     }
+
+    companion object {
+        fun from(value: Int) = if (value > 100) {
+            Codes.UNKNOWN
+        } else if (value > 16) {
+            Codes.UNKNOWN
+        } else {
+            Codes.ABORTED
+        }
+    }
 }
 
 data class Status(val code: Codes, val message: String) {

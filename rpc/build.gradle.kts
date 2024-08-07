@@ -45,6 +45,12 @@ kotlin {
             }
         }
 
+        val jsMain by getting {
+            dependencies {
+                implementation(npm("websocket", ">=1.0.32"))
+            }
+        }
+
         val androidMain by getting {
             dependencies {
                 implementation(libs.okhttp3.okhttp)
@@ -62,7 +68,7 @@ android {
 }
 
 mavenPublishing {
-    coordinates("com.latenighthack.ktbuf", "ktbuf-rpc", "1.0.1")
+    coordinates("com.latenighthack.ktbuf", "ktbuf-rpc", "1.0.2")
 
     pom {
         name.set("KtBuf")

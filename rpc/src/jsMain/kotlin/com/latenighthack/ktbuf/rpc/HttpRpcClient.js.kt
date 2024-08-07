@@ -1,9 +1,7 @@
 package com.latenighthack.ktbuf.rpc
 
-import com.latenighthack.ktbuf.proto.RpcClient
-import com.latenighthack.ktbuf.proto.Status
-import com.latenighthack.ktbuf.proto.fromHTTPCode
-import com.latenighthack.ktbuf.proto.toPath
+import com.latenighthack.ktbuf.net.*
+import com.latenighthack.ktbuf.proto.*
 import kotlinx.browser.window
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -24,7 +22,7 @@ import kotlin.coroutines.suspendCoroutine
 
 val isNode: Boolean = js("typeof window === 'undefined'") as Boolean
 
-private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<RpcClient.Response>) {
+private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<RpcResponse>) {
     if (xhr.readyState == XMLHttpRequest.DONE) {
         val headers = xhr.getAllResponseHeaders()
             .split("\r\n").associate {
@@ -38,15 +36,15 @@ private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<Rp
             }
 
         if (xhr.status / 100 == 2) {
-            coroutineContext.resume(RpcClient.Response(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>(), headers))
+            coroutineContext.resume(RpcResponse(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>(), headers))
         } else {
             val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.responseText)
-            coroutineContext.resumeWithException(RpcClient.ResponseException(xhr.responseURL, "POST", status.code, status.message))
+            coroutineContext.resumeWithException(RpcResponseException(xhr.responseURL, "POST", status.code, status.message))
         }
     }
 }
 
-private suspend fun httpPost(host: String, headers: Map<String, String>, path: String, secure: Boolean, data: ByteArray): RpcClient.Response = suspendCoroutine { c ->
+private suspend fun httpPost(host: String, headers: Map<String, String>, path: String, secure: Boolean, data: ByteArray): RpcResponse = suspendCoroutine { c ->
     val localHost = host
     val localPath = path
     val localSecure = secure
@@ -66,16 +64,18 @@ private suspend fun httpPost(host: String, headers: Map<String, String>, path: S
     xhr.send(data)
 }
 
-public class WebRpcClient(private val serverUrl: String, private val secure: Boolean) : RpcClient {
-    override suspend fun unaryCall(
-        method: RpcClient.MethodSpecifier,
+actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
+    private val secure = true
+
+    actual override suspend fun unaryCall(
+        method: RpcMethodSpecifier,
         headers: Map<String, String>,
         request: ByteArray
-    ): RpcClient.Response {
-        return httpPost(serverUrl, headers, method.toPath(""), secure, request)
+    ): RpcResponse {
+        return httpPost(serverPath, headers, method.toPath(""), secure, request)
     }
 
-    private class WebSocketServerStream(private val webSocket: WebSocket) : RpcClient.ServerStream {
+    private class WebSocketServerStream(private val webSocket: WebSocket) : RpcServerStream {
         private val receiveChannel = Channel<ByteArray>()
         private var doOnReady: (() -> Unit)? = null
         private var isReady = false
@@ -141,9 +141,9 @@ public class WebRpcClient(private val serverUrl: String, private val secure: Boo
         }
     }
 
-    override suspend fun serverStreamingCall(
-        method: RpcClient.MethodSpecifier,
-        block: suspend RpcClient.ServerStream.() -> Unit
+    actual override suspend fun serverStreamingCall(
+        method: RpcMethodSpecifier,
+        block: suspend RpcServerStream.() -> Unit
     ) {
         if (isNode) {
             js("global.WebSocket = require('websocket').w3cwebsocket")
@@ -151,7 +151,7 @@ public class WebRpcClient(private val serverUrl: String, private val secure: Boo
 
         val scheme = if (secure) "wss" else "ws"
 
-        val webSocket = WebSocket(method.toPath("$scheme://$serverUrl"))
+        val webSocket = WebSocket(method.toPath("$scheme://$serverPath"))
         val stream = WebSocketServerStream(webSocket)
 
         stream.block()

@@ -3,8 +3,9 @@
 package com.latenighthack.ktbuf.proto
 
 import com.latenighthack.ktbuf.*
-import com.latenighthack.ktbuf.proto.RpcClient
+import com.latenighthack.ktbuf.net.RpcClient
 import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
+import com.latenighthack.ktbuf.net.RpcMethodSpecifier
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.cancel
@@ -54,7 +55,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             }
             .toByteArray()
 
-        rpc.serverStreamingCall(RpcClient.MethodSpecifier(packageName, serviceName, methodName)) {
+        rpc.serverStreamingCall(RpcMethodSpecifier(packageName, serviceName, methodName)) {
             send(requestBytes)
 
             while (true) {
@@ -89,7 +90,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         readResponse: (ProtobufReader) -> ResponseType
     ): ResponseType {
         return rpc.unaryCall(
-            RpcClient.MethodSpecifier(packageName, serviceName, methodName), emptyMap(),
+            RpcMethodSpecifier(packageName, serviceName, methodName), emptyMap(),
             ProtobufOutputStream()
                 .also {
                     it.write {
@@ -115,7 +116,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         writeRequest: RequestType.(ProtobufWriter) -> Unit,
         readResponse: (ProtobufReader) -> ResponseType
     ): Flow<ResponseType> = channelFlow {
-        rpc.serverStreamingCall(RpcClient.MethodSpecifier(packageName, serviceName, methodName)) {
+        rpc.serverStreamingCall(RpcMethodSpecifier(packageName, serviceName, methodName)) {
             GlobalScope.launch {
                 request.collect { nextRequest ->
                     val requestBytes = ProtobufOutputStream()
