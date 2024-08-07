@@ -30,6 +30,7 @@ kotlin {
             dependencies {
                 //put your multiplatform dependencies here
                 implementation(libs.kotlinx.coroutines.core)
+                implementation(project(":library"))
             }
         }
         val commonTest by getting {
@@ -39,6 +40,12 @@ kotlin {
         }
 
         val jvmMain by getting {
+            dependencies {
+                implementation(libs.okhttp3.okhttp)
+            }
+        }
+
+        val androidMain by getting {
             dependencies {
                 implementation(libs.okhttp3.okhttp)
             }
@@ -55,7 +62,7 @@ android {
 }
 
 mavenPublishing {
-    coordinates("com.latenighthack.ktbuf", "ktbuf-library", "1.0.1")
+    coordinates("com.latenighthack.ktbuf", "ktbuf-rpc", "1.0.1")
 
     pom {
         name.set("KtBuf")
