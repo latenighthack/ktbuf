@@ -166,12 +166,20 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 fun ByteArray.toNSData(): NSData {
     return this.usePinned { pinned ->
-        NSData.create(bytes = pinned.addressOf(0), length = this.size.toULong())
+        if (this.isEmpty()) {
+            NSData()
+        } else {
+            NSData.create(bytes = pinned.addressOf(0), length = this.size.toULong())
+        }
     }
 }
 
 @OptIn(ExperimentalForeignApi::class)
 fun NSData.toByteArray(): ByteArray {
+    if (this.length.toInt() == 0) {
+        return byteArrayOf()
+    }
+
     val byteArray = ByteArray(this.length.toInt())
     memScoped {
         val buffer = byteArray.refTo(0).getPointer(this)
