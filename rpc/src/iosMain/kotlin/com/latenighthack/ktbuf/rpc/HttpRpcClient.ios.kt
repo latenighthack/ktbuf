@@ -74,6 +74,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
         val requestUrl = NSURL.URLWithString(url)!!
         val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl).apply {
             HTTPMethod = "POST"
+            setValue("application/proto", "Content-Type")
             headers.forEach { (key, value) ->
                 setValue(value, forHTTPHeaderField = key)
             }
