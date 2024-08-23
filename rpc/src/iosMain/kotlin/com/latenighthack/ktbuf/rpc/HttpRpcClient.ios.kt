@@ -107,9 +107,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
     ) {
         val url = method.toPath(serverPath)
         val requestUrl = NSURL.URLWithString(url)!!
-        val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl).apply {
-            HTTPMethod = "POST"
-        }
+        val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl)
 
         val webSocketTask = NSURLSession.sharedSession.webSocketTaskWithRequest(urlRequest)
         val serverStream = object : RpcServerStream {
@@ -125,7 +123,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
                             )
                         )
                     } else {
-                        val data = (message as NSData).toByteArray()
+                        val data = message?.data!!.toByteArray()
                         cont.resume(data)
                     }
                 }
