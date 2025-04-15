@@ -45,19 +45,14 @@ private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<Rp
 }
 
 private suspend fun httpPost(host: String, headers: Map<String, String>, path: String, secure: Boolean, data: ByteArray): RpcResponse = suspendCoroutine { c ->
-    val localHost = host
-    val localPath = path
-    val localSecure = secure
-    val localData = data
-
-    val scheme = if (secure) "https" else "http"
+    val scheme = if (secure) "" else "http://"
 
     val xhr = XMLHttpRequest()
 
     xhr.onreadystatechange = { _ ->
         statusHandler(xhr, c)
     }
-    xhr.open("POST", "$scheme://$host$path", true)
+    xhr.open("POST", "$scheme$host$path", true)
     xhr.responseType = XMLHttpRequestResponseType.ARRAYBUFFER
     xhr.setRequestHeader("Content-type", "application/proto")
 
@@ -65,7 +60,7 @@ private suspend fun httpPost(host: String, headers: Map<String, String>, path: S
 }
 
 actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
-    private val secure = true
+    private val secure = serverPath.startsWith("https://")
 
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
@@ -87,24 +82,20 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
             }
             webSocket.onclose = {
                 window.setTimeout({
-                    println("stream closed: ${(it as CloseEvent).code}, ${(it as CloseEvent).reason}, ${(it as CloseEvent).type}")
-                    receiveChannel.close()
+                    receiveChannel.close(RpcResponseException(webSocket.url, "WS", Codes.from((it as CloseEvent).code.toInt()), (it as CloseEvent).reason))
                 }, 20)
             }
             webSocket.onerror = {
-                println("stream error ${(it as ErrorEvent).message}")
                 window.setTimeout({
-                    receiveChannel.close()
+                    receiveChannel.close(RpcResponseException(webSocket.url, "WS", Codes.UNKNOWN, (it as ErrorEvent).message))
                 }, 20)
             }
             webSocket.onmessage = { event ->
                 if (js("event.data instanceof ArrayBuffer") as Boolean) {
-                    println("Message received")
                     val data = Int8Array(event.data as ArrayBuffer).unsafeCast<ByteArray>()
 
                     receiveChannel.trySend(data)
                 } else {
-                    println("Other message event")
                     val reader = FileReader()
 
                     reader.onloadend = {
@@ -149,9 +140,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
             js("global.WebSocket = require('websocket').w3cwebsocket")
         }
 
-        val scheme = if (secure) "wss" else "ws"
+        val serverWsUrl = if (secure) serverPath.replace("https:", "wss:") else "ws://${serverPath.replace("http://", "")}"
 
-        val webSocket = WebSocket(method.toPath("$scheme://$serverPath"))
+        val webSocket = WebSocket(method.toPath(serverWsUrl))
         val stream = WebSocketServerStream(webSocket)
 
         stream.block()

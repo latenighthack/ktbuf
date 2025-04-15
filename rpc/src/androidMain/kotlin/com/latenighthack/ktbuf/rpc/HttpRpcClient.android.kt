@@ -19,6 +19,7 @@ import kotlin.coroutines.resumeWithException
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class, DelicateCoroutinesApi::class)
 actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
     private val client: OkHttpClient = OkHttpClient()
+    private val isSecure = serverPath.startsWith("https")
 
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
@@ -27,7 +28,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
     ): RpcResponse {
         return suspendCancellableCoroutine { continuation ->
             val unaryRequest = Request.Builder()
-                .url(method.toPath("https://$serverPath"))
+                .url(method.toPath("${if (isSecure) "" else "http"}://$serverPath"))
                 .headers(Headers.headersOf(
                     *headers
                         .entries
@@ -105,7 +106,11 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
 
         val requestData = Request.Builder()
             .get()
-            .url(method.toPath("wss://$serverPath"))
+            .url(method.toPath(if (isSecure) {
+                serverPath.replace("https:", "wss:")
+            } else {
+                "ws://${serverPath.replace("http://", "")}"
+            }))
             .build()
         val webSocket = client.newWebSocket(requestData, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {

@@ -41,7 +41,7 @@ kotlin {
 
         val jvmMain by getting {
             dependencies {
-                implementation(libs.okhttp3.okhttp)
+                api(libs.okhttp3.okhttp)
             }
         }
 
