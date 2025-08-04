@@ -17,7 +17,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class, DelicateCoroutinesApi::class)
-actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
+actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
     private val client: OkHttpClient = OkHttpClient()
     private val isSecure = serverPath.startsWith("https")
 
@@ -27,8 +27,13 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
         request: ByteArray
     ): RpcResponse {
         return suspendCancellableCoroutine { continuation ->
+            val path = if (useApiGateway) {
+                method.toApiGatewayPath("${if (isSecure) "" else "http://"}$serverPath")
+            } else {
+                method.toPath("${if (isSecure) "" else "http://"}$serverPath")
+            }
             val unaryRequest = Request.Builder()
-                .url(method.toPath("${if (isSecure) "" else "http"}://$serverPath"))
+                .url(path)
                 .headers(Headers.headersOf(
                     *headers
                         .entries
@@ -104,13 +109,20 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
             context.block()
         }
 
+        val wsUrl = if (isSecure) {
+            serverPath.replace("https:", "wss:")
+        } else {
+            "ws://${serverPath.replace("http://", "")}"
+        }
+        val url = if (useApiGateway) {
+            method.toApiGatewayPath(wsUrl)
+        } else {
+            method.toPath(wsUrl)
+        }
+
         val requestData = Request.Builder()
             .get()
-            .url(method.toPath(if (isSecure) {
-                serverPath.replace("https:", "wss:")
-            } else {
-                "ws://${serverPath.replace("http://", "")}"
-            }))
+            .url(url)
             .build()
         val webSocket = client.newWebSocket(requestData, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {

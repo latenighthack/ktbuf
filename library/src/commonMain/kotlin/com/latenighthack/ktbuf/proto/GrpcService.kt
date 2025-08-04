@@ -56,29 +56,51 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             .toByteArray()
 
         rpc.serverStreamingCall(RpcMethodSpecifier(packageName, serviceName, methodName)) {
+            println("RPC: Connecting to 1 $methodName")
+
             send(requestBytes)
 
+            println("RPC: Sent to 2 $methodName")
+
             while (true) {
-                val responseBytes = try { receive() } catch (ex: ClosedReceiveChannelException) {
+                val responseBytes = try {
+                    println("RPC: Trying to receive to 3 $methodName")
+                    val bytes = receive()
+                    println("RPC: Receiving in 4 $methodName = ${bytes.size}")
+
+                    bytes
+                } catch (ex: ClosedReceiveChannelException) {
+                    println("RPC: Closed ReceiveChannelException")
                     if (ex.cause != null) {
+                        println("RPC: Cancelled")
                         this@channelFlow.cancel(ex.cause!!.toString(), ex.cause!!)
                     }
+                    println("RPC: Stopped without cancel")
 
                     return@serverStreamingCall
                 }
 
+                println("RPC: Got bytes $methodName")
                 val readBytes = MutableLinkedByteArray()
                 val reader = ScopedProtobufReader(readBytes)
                 readBytes.insert(responseBytes)
+                println("RPC: Proceeding with bytes $methodName")
 
                 val response = try {
-                    readResponse(reader)
+                    println("RPC: Trying read $methodName")
+                    val resp = readResponse(reader)
+                    println("RPC: Did read $methodName")
+
+                    resp
                 } catch (ex: Throwable) {
+                    println("RPC: failed to parse $methodName")
                     this@channelFlow.cancel("failed to unmarshal response", ex)
                     return@serverStreamingCall
                 }
 
+                println("RPC: sending response $methodName")
                 this@channelFlow.send(response)
+                println("RPC: sent response $methodName")
             }
         }
     }

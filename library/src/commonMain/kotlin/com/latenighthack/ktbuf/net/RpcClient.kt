@@ -1,8 +1,56 @@
 package com.latenighthack.ktbuf.net
 
+import com.latenighthack.ktbuf.ProtobufReader
+import com.latenighthack.ktbuf.ProtobufWriter
 import com.latenighthack.ktbuf.proto.Codes
+import kotlinx.coroutines.flow.Flow
 
 fun RpcMethodSpecifier.toPath(serverPath: String) = "${serverPath}/api/${packageName}.${serviceName}/${methodName}"
+fun RpcMethodSpecifier.toApiGatewayPath(serverPath: String) = "${serverPath}/ws_${packageName.replace('.', '_')}_${serviceName.replace('.', '_')}_${methodName}"
+
+data class GrpcRequestContext(
+    val originalUrl: String,
+    val headers: Map<String, String>,
+    val query: Map<String, String>,
+    val extensions: Map<String, Any>,
+    val serverDescriptor: ServerDescriptor,
+    val methodDescriptor: ServerMethodDescriptor<*, *, *>
+)
+
+sealed class ServerMethod<Req : Any, Res : Any, Srv: Any> {
+    data class Unary<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Req) -> Res) : ServerMethod<Req, Res, Srv>()
+    data class ClientStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Flow<Req>) -> Res) : ServerMethod<Req, Res, Srv>()
+    data class ServerStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Req) -> Flow<Res>) : ServerMethod<Req, Res, Srv>()
+    data class ClientServerStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Flow<Req>) -> Flow<Res>) : ServerMethod<Req, Res, Srv>()
+}
+
+data class ServerMethodDescriptor<Req : Any, Res : Any, Srv: Any>(
+    val methodName: String,
+    val requestParser: (ProtobufReader) -> Req,
+    val responseSerializer: (ProtobufWriter, Any) -> Unit,
+    val streamingIn: Boolean,
+    val streamingOut: Boolean,
+    val handler: ServerMethod<Req, Res, Srv>,
+    val dummy: Int = 0
+) {
+    constructor(
+        methodName: String,
+        requestParser: (ProtobufReader) -> Req,
+        typedResponseSerializer: Res.(ProtobufWriter) -> Unit,
+        streamingIn: Boolean,
+        streamingOut: Boolean,
+        handler: ServerMethod<Req, Res, Srv>
+    ) : this(methodName, requestParser, { writer, type ->
+        @Suppress("UNCHECKED_CAST")
+        (type as Res).typedResponseSerializer(writer)
+    }, streamingIn, streamingOut, handler)
+}
+
+data class ServerDescriptor(
+    val packageName: String,
+    val serviceName: String,
+    val methods: List<ServerMethodDescriptor<*, *, *>>
+)
 
 interface RpcInterceptor {
 }

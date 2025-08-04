@@ -56,10 +56,14 @@ private suspend fun httpPost(host: String, headers: Map<String, String>, path: S
     xhr.responseType = XMLHttpRequestResponseType.ARRAYBUFFER
     xhr.setRequestHeader("Content-type", "application/proto")
 
+    for ((key, value) in headers) {
+        xhr.setRequestHeader(key, value)
+    }
+
     xhr.send(data)
 }
 
-actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
+actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
     private val secure = serverPath.startsWith("https://")
 
     actual override suspend fun unaryCall(
@@ -141,8 +145,12 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
         }
 
         val serverWsUrl = if (secure) serverPath.replace("https:", "wss:") else "ws://${serverPath.replace("http://", "")}"
-
-        val webSocket = WebSocket(method.toPath(serverWsUrl))
+        val wsUrl = if (useApiGateway) {
+            method.toApiGatewayPath(serverWsUrl)
+        } else {
+            method.toPath(serverWsUrl)
+        }
+        val webSocket = WebSocket(wsUrl)
         val stream = WebSocketServerStream(webSocket)
 
         stream.block()

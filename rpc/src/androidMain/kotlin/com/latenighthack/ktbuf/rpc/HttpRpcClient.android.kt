@@ -17,7 +17,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 @OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class, DelicateCoroutinesApi::class)
-actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
+actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
     private val client: OkHttpClient = OkHttpClient()
     private val isSecure = serverPath.startsWith("https")
 
@@ -27,8 +27,13 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
         request: ByteArray
     ): RpcResponse {
         return suspendCancellableCoroutine { continuation ->
+            val path = if (useApiGateway) {
+                method.toApiGatewayPath("${if (isSecure) "" else "http://"}$serverPath")
+            } else {
+                method.toPath("${if (isSecure) "" else "http://"}$serverPath")
+            }
             val unaryRequest = Request.Builder()
-                .url(method.toPath("${if (isSecure) "" else "http"}://$serverPath"))
+                .url(path)
                 .headers(Headers.headersOf(
                     *headers
                         .entries

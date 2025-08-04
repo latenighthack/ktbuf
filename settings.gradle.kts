@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 rootProject.name = "ktbuf"
 include(":library")
 include(":rpc")
+include(":server")
+include(":test")

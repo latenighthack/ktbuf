@@ -6,7 +6,7 @@ import com.latenighthack.ktbuf.net.RpcResponse
 import com.latenighthack.ktbuf.net.RpcServerStream
 
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
-public expect class HttpRpcClient(serverPath: String): RpcClient {
+public expect class HttpRpcClient(serverPath: String, useApiGateway: Boolean = false): RpcClient {
 
     override suspend fun unaryCall(method: RpcMethodSpecifier, headers: Map<String, String>, request: ByteArray): RpcResponse
 

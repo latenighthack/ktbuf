@@ -63,7 +63,7 @@ class MainQueueDispatcher: CoroutineDispatcher(), Delay {
 
 private val mainDispatcher = MainQueueDispatcher()
 
-actual class HttpRpcClient actual constructor(private val serverPath: String) : RpcClient {
+actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
     @OptIn(ExperimentalForeignApi::class)
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
@@ -105,7 +105,12 @@ actual class HttpRpcClient actual constructor(private val serverPath: String) : 
         method: RpcMethodSpecifier,
         block: suspend RpcServerStream.() -> Unit
     ) {
-        val url = method.toPath(serverPath)
+        val url = if (useApiGateway) {
+            method.toApiGatewayPath(serverPath)
+        } else {
+            method.toPath(serverPath)
+        }
+
         val requestUrl = NSURL.URLWithString(url)!!
         val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl)
 
