@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package patch.v1;
+
+option java_package = "com.latenighthack.ktbuf.patch.v1";
+
+message RootMessage {
+    InnerMessage inner = 1;
+    repeated RepeatedMessage repeat_me = 2;
+    int32 an_int = 3;
+    string str = 4;
+    enum Type {
+        UNKNOWN = 0;
+        A = 3;
+        B = 4;
+        C = 5;
+    }
+    Type type = 5;
+
+//    oneof kind {
+//        OneOfA a = 10;
+//        OneOfB b = 11;
+//        OneOfC c = 12;
+//    }
+
+    message InnerMessage {
+        string str = 1;
+        int32 an_int = 2;
+        InnerInnerMessage inner_inner = 3;
+    }
+
+    message RepeatedMessage {
+        int32 repeated_int = 1;
+    }
+
+    message InnerInnerMessage {
+        string str = 5;
+        int32 an_int = 6;
+    }
+
+    message OneOfA {
+        int32 an_int = 1;
+    }
+
+    message OneOfB {
+        int32 an_int = 1;
+    }
+
+    message OneOfC {
+        int32 an_int = 1;
+    }
+}

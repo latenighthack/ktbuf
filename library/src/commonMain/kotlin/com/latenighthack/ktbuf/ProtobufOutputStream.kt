@@ -4,7 +4,7 @@ import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
 import com.latenighthack.ktbuf.proto.Enum
 import kotlin.experimental.or
 
-internal object ProtoConstants {
+object ProtoConstants {
     object Flags {
         const val TagType = 7
         const val TagTypeBitCount = 3
@@ -67,6 +67,12 @@ interface ProtobufWriter {
 }
 
 class ProtobufOutputStream(bufferSize: Int = 8192) {
+    companion object {
+        fun encode(writer: ProtobufWriter.() -> Unit): ByteArray {
+            return ProtobufOutputStream().apply { write { it.writer() } }.toByteArray()
+        }
+    }
+
     private val output = MutableLinkedByteArray(bufferSize)
     private val writer = ScopedProtobufWriter(output)
 

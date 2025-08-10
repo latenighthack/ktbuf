@@ -5,6 +5,42 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
     id("com.vanniktech.maven.publish.base")
+    alias(libs.plugins.protobuf)
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.20.1"
+    }
+
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+//                remove("java")
+            }
+
+            task.plugins {
+                create("kt") {
+                    outputSubDir = "kotlin"
+                }
+                create("kt-patch") {
+                    outputSubDir = "kotlin"
+                }
+            }
+
+            val protoSourceDir: FileCollection = files("${projectDir}/src/commonMain/proto")
+            task.addSourceDirs(protoSourceDir)
+            task.addIncludeDir(protoSourceDir)
+
+            task.outputs.upToDateWhen { false }
+
+            val outputDir = task.outputBaseDir
+
+            if (outputDir.indexOf("/proto/debug") > 0) {
+                kotlin.sourceSets.getByName("commonMain").kotlin.srcDirs("$outputDir/kotlin")
+            }
+        }
+    }
 }
 
 kotlin {
@@ -30,6 +66,7 @@ kotlin {
             dependencies {
                 //put your multiplatform dependencies here
                 implementation(libs.kotlinx.coroutines.core)
+                implementation(project(":library"))
             }
         }
         val commonTest by getting {
@@ -55,7 +92,7 @@ android {
 }
 
 mavenPublishing {
-    coordinates("com.latenighthack.ktbuf", "ktbuf-library", "1.1.0")
+    coordinates("com.latenighthack.ktbuf", "ktbuf-patch", "1.1.0")
 
     pom {
         name.set("KtBuf")
@@ -82,4 +119,8 @@ mavenPublishing {
             developerConnection.set("scm:git:ssh://git@github.com/latenighthack/ktbuf.git")
         }
     }
+}
+
+tasks.withType<JavaCompile> {
+    dependsOn("generateDebugProto")
 }
