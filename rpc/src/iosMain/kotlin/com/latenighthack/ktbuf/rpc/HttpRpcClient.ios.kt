@@ -103,7 +103,8 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
 
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
-        block: suspend RpcServerStream.() -> Unit
+        block: suspend RpcServerStream.() -> Unit,
+        readyCallback: () -> Unit
     ) {
         val url = if (useApiGateway) {
             method.toApiGatewayPath(serverPath)
@@ -153,9 +154,16 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                     }
                 }
             }
+
+            override suspend fun closeOutbound() {
+            }
+
+            override suspend fun closeInbound() {
+            }
         }
 
         webSocketTask.resume()
+        readyCallback()
 
         try {
             serverStream.block()

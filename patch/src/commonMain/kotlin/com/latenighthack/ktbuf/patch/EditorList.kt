@@ -15,8 +15,16 @@ open class EditorList<T>(
         return backingList.get(index)
     }
 
+    override fun remove(element: T): Boolean {
+        val bytesToMatch = element.writer()
+        context.remove(fieldNumber, bytesToMatch)
+
+        return super.remove(element)
+    }
+
     override fun removeAt(index: Int): T {
         context.remove(fieldNumber, index)
+
         return backingList.removeAt(index)
     }
 
@@ -28,5 +36,10 @@ open class EditorList<T>(
     override fun add(index: Int, element: T) {
         context.insert(fieldNumber, index, element.writer())
         return backingList.add(index, element)
+    }
+
+    fun addDistinct(element: T) {
+//        context.insert(fieldNumber, index, element.writer())
+//        return backingList.add(index, element)
     }
 }

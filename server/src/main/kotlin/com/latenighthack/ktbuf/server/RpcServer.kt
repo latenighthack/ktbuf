@@ -1,6 +1,5 @@
 package com.latenighthack.ktbuf.server
 
-import com.latenighthack.ktbuf.net.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.cio.*
@@ -8,10 +7,10 @@ import io.ktor.server.engine.*
 import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.util.logging.*
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 
-suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {}, extensions:Application.() -> Unit = {}): EmbeddedServer<*, *> {
+suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {}, extensions: suspend Application.() -> Unit = {}): EmbeddedServer<*, *> {
+    lateinit var job: Job
     val server = embeddedServer(
         CIO,
         environment = applicationEnvironment { log = KtorSimpleLogger("server") },
@@ -21,8 +20,11 @@ suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {
     ) {
         install(WebSockets)
 
-        extensions()
+        job = launch {
+            extensions()
+        }
     }
+
     val ready = CompletableDeferred<Boolean>()
 
     server.monitor.subscribe(ServerReady) {
@@ -35,6 +37,7 @@ suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {
     server.start()
 
     ready.await()
+    job.join()
 
     return server
 }

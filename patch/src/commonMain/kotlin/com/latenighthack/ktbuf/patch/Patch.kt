@@ -43,14 +43,16 @@ sealed class Change {
 
     data class Require(val path: Path) : Change()
 
-    data class Replace(val path: Path, val message: ByteArray) : Change() {
+    data class Replace(val path: Path, val message: ByteArray, val skipFieldNumbers: List<Int>) : Change() {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
+            if (other == null || this::class != other::class) return false
 
             other as Replace
 
             if (path != other.path) return false
             if (!message.contentEquals(other.message)) return false
+            if (skipFieldNumbers != other.skipFieldNumbers) return false
 
             return true
         }
@@ -58,6 +60,7 @@ sealed class Change {
         override fun hashCode(): Int {
             var result = path.hashCode()
             result = 31 * result + message.contentHashCode()
+            result = 31 * result + skipFieldNumbers.hashCode()
             return result
         }
     }
@@ -65,6 +68,16 @@ sealed class Change {
     data class Remove(val path: Path) : Change()
 
     data class RemoveAll(val path: Path) : Change()
+
+    data class InsertDistinct(
+        val path: Path, val message: ByteArray,
+        val matchPath: Path?, val matchMessage: ByteArray?
+    ) : Change()
+
+    data class RemoveDistinct(
+        val path: Path, val message: ByteArray,
+        val matchPath: Path?, val matchMessage: ByteArray?
+    ) : Change()
 }
 
 data class EditContext(
@@ -75,17 +88,19 @@ data class EditContext(
         return EditContext(changes, pathPrefix.appending(Path.Component(fieldId, index)))
     }
 
-    fun <T> replace(fieldNumber: Int, value: T, encode: ProtobufWriter.(T, Int) -> Unit) {
+    fun <T> replace(fieldNumber: Int, skipFieldNumbers: List<Int> = listOf(), value: T, encode: ProtobufWriter.(T, Int) -> Unit) {
         changes.add(Change.Replace(
             pathPrefix.appending(fieldNumber, 0),
-            ProtobufOutputStream.encode { encode(value, fieldNumber) }
+            ProtobufOutputStream.encode { encode(value, fieldNumber) },
+            skipFieldNumbers
         ))
     }
 
-    fun replace(fieldNumber: Int, value: ByteArray) {
+    fun replace(fieldNumber: Int, skipFieldNumbers: List<Int> = listOf(), value: ByteArray) {
         changes.add(Change.Replace(
             pathPrefix.appending(fieldNumber, 0),
-            value
+            value,
+            skipFieldNumbers
         ))
     }
 
@@ -99,6 +114,15 @@ data class EditContext(
     fun remove(fieldNumber: Int, index: Int) {
         changes.add(Change.Remove(
             pathPrefix.appending(fieldNumber, index)
+        ))
+    }
+
+    fun remove(fieldNumber: Int, bytesToMatch: ByteArray) {
+        changes.add(Change.RemoveDistinct(
+            pathPrefix.appending(fieldNumber),
+            bytesToMatch,
+            null,
+            null
         ))
     }
 
@@ -130,7 +154,7 @@ data class EditContext(
     }
 }
 
-data class Patch<T>(val changes: List<Change>, val value: T)
+data class Patch(val changes: List<Change>)
 
 fun ByteArray.applyChanges(changes: List<Change>): ByteArray {
     var currentState = this
@@ -237,6 +261,9 @@ private fun ProtobufReader.applyChange(change: Change): ByteArray {
                     writer.encodeRaw(change.message)
                 }
             }
+
+            is Change.InsertDistinct -> TODO()
+            is Change.RemoveDistinct -> TODO()
         }
     }
 

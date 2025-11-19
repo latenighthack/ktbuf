@@ -6,13 +6,11 @@ import com.latenighthack.ktbuf.*
 import com.latenighthack.ktbuf.net.RpcClient
 import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
 import com.latenighthack.ktbuf.net.RpcMethodSpecifier
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onCompletion
 
 open class GrpcService(private val rpc: RpcClient, private val packageName: String, private val serviceName: String) {
     data class MethodDescriptor<Req : Any, Res : Any>(
@@ -45,7 +43,8 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         methodName: String,
         request: RequestType,
         writeRequest: RequestType.(ProtobufWriter) -> Unit,
-        readResponse: (ProtobufReader) -> ResponseType
+        readResponse: (ProtobufReader) -> ResponseType,
+        readyCallback: () -> Unit = {}
     ): Flow<ResponseType> = channelFlow {
         val requestBytes = ProtobufOutputStream()
             .also {
@@ -55,61 +54,50 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             }
             .toByteArray()
 
-        rpc.serverStreamingCall(RpcMethodSpecifier(packageName, serviceName, methodName)) {
-            println("RPC: Connecting to 1 $methodName")
+        rpc.serverStreamingCall(
+            RpcMethodSpecifier(packageName, serviceName, methodName),
+            {
+                send(requestBytes)
+                readyCallback()
 
-            send(requestBytes)
+                while (true) {
+                    val responseBytes = try {
+                        val bytes = receive()
 
-            println("RPC: Sent to 2 $methodName")
+                        bytes
+                    } catch (ex: ClosedReceiveChannelException) {
+                        if (ex.cause != null) {
+                            this@channelFlow.cancel(ex.cause!!.toString(), ex.cause!!)
+                        }
 
-            while (true) {
-                val responseBytes = try {
-                    println("RPC: Trying to receive to 3 $methodName")
-                    val bytes = receive()
-                    println("RPC: Receiving in 4 $methodName = ${bytes.size}")
-
-                    bytes
-                } catch (ex: ClosedReceiveChannelException) {
-                    println("RPC: Closed ReceiveChannelException")
-                    if (ex.cause != null) {
-                        println("RPC: Cancelled")
-                        this@channelFlow.cancel(ex.cause!!.toString(), ex.cause!!)
+                        return@serverStreamingCall
                     }
-                    println("RPC: Stopped without cancel")
 
-                    return@serverStreamingCall
+                    val readBytes = MutableLinkedByteArray()
+                    val reader = ScopedProtobufReader(readBytes)
+                    readBytes.insert(responseBytes)
+
+                    val response = try {
+                        val resp = readResponse(reader)
+
+                        resp
+                    } catch (ex: Throwable) {
+                        this@channelFlow.cancel("failed to unmarshal response", ex)
+                        return@serverStreamingCall
+                    }
+
+                    this@channelFlow.send(response)
                 }
-
-                println("RPC: Got bytes $methodName")
-                val readBytes = MutableLinkedByteArray()
-                val reader = ScopedProtobufReader(readBytes)
-                readBytes.insert(responseBytes)
-                println("RPC: Proceeding with bytes $methodName")
-
-                val response = try {
-                    println("RPC: Trying read $methodName")
-                    val resp = readResponse(reader)
-                    println("RPC: Did read $methodName")
-
-                    resp
-                } catch (ex: Throwable) {
-                    println("RPC: failed to parse $methodName")
-                    this@channelFlow.cancel("failed to unmarshal response", ex)
-                    return@serverStreamingCall
-                }
-
-                println("RPC: sending response $methodName")
-                this@channelFlow.send(response)
-                println("RPC: sent response $methodName")
-            }
-        }
+            }, {}
+        )
     }
 
     protected suspend fun <RequestType, ResponseType> clientUnaryServerUnary(
         methodName: String,
         request: RequestType,
         writeRequest: RequestType.(ProtobufWriter) -> Unit,
-        readResponse: (ProtobufReader) -> ResponseType
+        readResponse: (ProtobufReader) -> ResponseType,
+        readyCallback: () -> Unit = {}
     ): ResponseType {
         return rpc.unaryCall(
             RpcMethodSpecifier(packageName, serviceName, methodName), emptyMap(),
@@ -136,36 +124,57 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         methodName: String,
         request: Flow<RequestType>,
         writeRequest: RequestType.(ProtobufWriter) -> Unit,
-        readResponse: (ProtobufReader) -> ResponseType
+        readResponse: (ProtobufReader) -> ResponseType,
+        readyCallback: () -> Unit = {}
     ): Flow<ResponseType> = channelFlow {
-        rpc.serverStreamingCall(RpcMethodSpecifier(packageName, serviceName, methodName)) {
-            GlobalScope.launch {
-                request.collect { nextRequest ->
-                    val requestBytes = ProtobufOutputStream()
-                        .also {
-                            it.write {
-                                nextRequest.writeRequest(it)
-                            }
+        rpc.serverStreamingCall(
+            RpcMethodSpecifier(packageName, serviceName, methodName),
+            {
+                var keepGoing = true
+                val requestJob = GlobalScope.launch {
+                    request
+                        .onCompletion {
+                            keepGoing = false
+                            closeInbound()
                         }
-                        .toByteArray()
+                        .collect { nextRequest ->
+                            val requestBytes = ProtobufOutputStream()
+                                .also {
+                                    it.write {
+                                        nextRequest.writeRequest(it)
+                                    }
+                                }
+                                .toByteArray()
 
-                    send(requestBytes)
-                }
-            }
-
-            while (true) {
-                val bytes = receive()
-                val readBytes = MutableLinkedByteArray()
-                val reader = ScopedProtobufReader(readBytes)
-
-                readBytes.insert(bytes)
-
-                val field = reader.readField {
-                    readResponse(it)
+                            send(requestBytes)
+                        }
                 }
 
-                this@channelFlow.send(field)
-            }
-        }
+                try {
+                    while (keepGoing) {
+                        val bytes = receive()
+                        val readBytes = MutableLinkedByteArray()
+                        val reader = ScopedProtobufReader(readBytes)
+
+                        readBytes.insert(bytes)
+
+                        val response = try {
+                            val resp = readResponse(reader)
+
+                            resp
+                        } catch (ex: Throwable) {
+                            this@channelFlow.cancel("failed to unmarshal response", ex)
+                            return@serverStreamingCall
+                        }
+
+                        this@channelFlow.send(response)
+                    }
+                } catch (ex: Throwable) {
+                } finally {
+                    requestJob.cancel()
+                    closeOutbound()
+                }
+            }, readyCallback
+        )
     }
 }

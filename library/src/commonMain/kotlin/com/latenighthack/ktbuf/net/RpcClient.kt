@@ -17,11 +17,16 @@ data class GrpcRequestContext(
     val methodDescriptor: ServerMethodDescriptor<*, *, *>
 )
 
+sealed class StreamControlEvent<T : Any> {
+    class Close<T : Any> : StreamControlEvent<T>()
+    data class Message<T : Any>(val message: T) : StreamControlEvent<T>()
+}
+
 sealed class ServerMethod<Req : Any, Res : Any, Srv: Any> {
     data class Unary<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Req) -> Res) : ServerMethod<Req, Res, Srv>()
     data class ClientStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Flow<Req>) -> Res) : ServerMethod<Req, Res, Srv>()
-    data class ServerStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Req) -> Flow<Res>) : ServerMethod<Req, Res, Srv>()
-    data class ClientServerStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Flow<Req>) -> Flow<Res>) : ServerMethod<Req, Res, Srv>()
+    data class ServerStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Req) -> Flow<StreamControlEvent<Res>>) : ServerMethod<Req, Res, Srv>()
+    data class ClientServerStreaming<Req : Any, Res : Any, Srv: Any>(val handler: suspend Srv.(GrpcRequestContext, Flow<Req>) -> Flow<StreamControlEvent<Res>>) : ServerMethod<Req, Res, Srv>()
 }
 
 data class ServerMethodDescriptor<Req : Any, Res : Any, Srv: Any>(
@@ -105,6 +110,14 @@ private class InterceptedServerStream(
             next.send(transformed)
         }
     }
+
+    override suspend fun closeOutbound() {
+        next.closeOutbound()
+    }
+
+    override suspend fun closeInbound() {
+        next.closeInbound()
+    }
 }
 
 class InterceptingRpcClient(
@@ -131,20 +144,24 @@ class InterceptingRpcClient(
 
     override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
-        block: suspend RpcServerStream.() -> Unit
+        block: suspend RpcServerStream.() -> Unit,
+        readyCallback: () -> Unit
     ) {
-        rpcClient.serverStreamingCall(method) {
-            val thisServerStream = this
-            val stream = interceptors.fold(thisServerStream) { nextStream, interceptor ->
-                if (interceptor !is StreamingRpcInterceptor) {
-                    nextStream
-                } else {
-                    InterceptedServerStream(method, interceptor, nextStream)
+        rpcClient.serverStreamingCall(
+            method,
+            {
+                val thisServerStream = this
+                val stream = interceptors.fold(thisServerStream) { nextStream, interceptor ->
+                    if (interceptor !is StreamingRpcInterceptor) {
+                        nextStream
+                    } else {
+                        InterceptedServerStream(method, interceptor, nextStream)
+                    }
                 }
-            }
 
-            stream.block()
-        }
+                stream.block()
+            }, readyCallback
+        )
     }
 }
 
@@ -166,10 +183,18 @@ interface RpcServerStream {
 
     @Throws(IllegalStateException::class)
     suspend fun send(bytes: ByteArray)
+
+    suspend fun closeOutbound()
+
+    suspend fun closeInbound()
 }
 
 public interface RpcClient {
     suspend fun unaryCall(method: RpcMethodSpecifier, headers: Map<String, String>, request: ByteArray): RpcResponse
 
-    suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit)
+    suspend fun serverStreamingCall(
+        method: RpcMethodSpecifier,
+        block: suspend RpcServerStream.() -> Unit,
+        readyCallback: () -> Unit
+    )
 }

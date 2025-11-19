@@ -28,8 +28,9 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(project(":test"))
+    testImplementation(project(":rpc"))
 }
 
 mavenPublishing {
-    coordinates("com.latenighthack.ktbuf", "ktbuf-server", "1.1.0")
+    coordinates("com.latenighthack.ktbuf", "ktbuf-server", "1.1.1")
 }

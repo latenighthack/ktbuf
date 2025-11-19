@@ -13,20 +13,16 @@ class PatchTests {
             type = RootMessage.Type.C
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
         assertEquals(RootMessage.Type.B, original.type)
 
         // the edit updates the value appropriately
-        assertEquals(RootMessage.Type.C, edited.type)
+        assertEquals(RootMessage.Type.C, patched.type)
 
         // the edit is otherwise the same
-        assertEquals(edited, original.copy(type = edited.type))
-
-        // deserializing the patch returns a message equal to edited
-        assertEquals(edited, patched)
+        assertEquals(patched, original.copy(type = patched.type))
     }
 
     @Test
@@ -37,20 +33,13 @@ class PatchTests {
             anInt = 42
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
         assertEquals(10, original.anInt)
 
-        // the edit updates the value appropriately
-        assertEquals(42, edited.anInt)
-
         // the edit is otherwise the same
-        assertEquals(edited, original.copy(anInt = edited.anInt))
-
-        // deserializing the patch returns a message equal to edited
-        assertEquals(edited, patched)
+        assertEquals(patched, original.copy(anInt = patched.anInt))
     }
 
     @Test
@@ -61,14 +50,12 @@ class PatchTests {
             str = "world"
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
         assertEquals("hello", original.str)
-        assertEquals("world", edited.str)
-        assertEquals(edited, original.copy(str = edited.str))
-        assertEquals(edited, patched)
+        assertEquals("world", patched.str)
+        assertEquals(patched, original.copy(str = patched.str))
     }
 
     @Test
@@ -79,14 +66,11 @@ class PatchTests {
             anInt = 42
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
         assertEquals(0, original.anInt)
-        assertEquals(42, edited.anInt)
-        assertEquals(edited, original.copy(anInt = edited.anInt))
-        assertEquals(edited, patched)
+        assertEquals(42, patched.anInt)
     }
 
     @Test
@@ -99,14 +83,12 @@ class PatchTests {
             }
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
         assertEquals(null, original.inner?.anInt)
-        assertEquals(9000, edited.inner?.anInt)
-        assertEquals(edited, original.copy(inner = RootMessage.InnerMessage(anInt = edited.inner?.anInt!!)))
-        assertEquals(edited, patched)
+        assertEquals(9000, patched.inner?.anInt)
+        assertEquals(patched, original.copy(inner = RootMessage.InnerMessage(anInt = patched.inner?.anInt!!)))
     }
 
     @Test
@@ -121,14 +103,12 @@ class PatchTests {
             }
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
         assertEquals(null, original.inner?.innerInner?.anInt)
-        assertEquals(9000, edited.inner?.innerInner?.anInt)
-        assertEquals(edited, original.copy(inner = RootMessage.InnerMessage(innerInner = RootMessage.InnerInnerMessage(anInt = edited.inner?.innerInner?.anInt!!))))
-        assertEquals(edited, patched)
+        assertEquals(9000, patched.inner?.innerInner?.anInt)
+        assertEquals(patched, original.copy(inner = RootMessage.InnerMessage(innerInner = RootMessage.InnerInnerMessage(anInt = patched.inner?.innerInner?.anInt!!))))
     }
 
     @Test
@@ -143,12 +123,10 @@ class PatchTests {
             }
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
-        assertEquals(listOf(2), edited.repeatMe.map { it.repeatedInt })
-        assertEquals(edited, patched)
+        assertEquals(listOf(2), patched.repeatMe.map { it.repeatedInt })
     }
 
     @Test
@@ -169,12 +147,10 @@ class PatchTests {
             }
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
-        assertEquals(listOf(2, 3, 4), edited.repeatMe.map { it.repeatedInt })
-        assertEquals(edited, patched)
+        assertEquals(listOf(2, 3, 4), patched.repeatMe.map { it.repeatedInt })
     }
 
     @Test
@@ -195,13 +171,11 @@ class PatchTests {
             }
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
-        assertEquals("testing", edited.str)
-        assertEquals(listOf(2, 3, 4), edited.repeatMe.map { it.repeatedInt })
-        assertEquals(edited, patched)
+        assertEquals("testing", patched.str)
+        assertEquals(listOf(2, 3, 4), patched.repeatMe.map { it.repeatedInt })
     }
 
     @Test
@@ -215,16 +189,36 @@ class PatchTests {
         val encodedOriginal = original.toByteArray()
         val patch = original.edit {
             repeatMe {
+                removeAt(2)
+            }
+        }
+
+        val encodedPatched = encodedOriginal.applyChanges(patch.changes)
+        val patched = RootMessage.fromByteArray(encodedPatched)
+
+        assertEquals("testing", patched.str)
+        assertEquals(listOf(1, 2, 4), patched.repeatMe.map { it.repeatedInt })
+    }
+
+    @Test
+    fun `patch removes distinct values from message`() {
+        val original = RootMessage(anInt = 12, str = "testing", repeatMe = listOf(
+            RootMessage.RepeatedMessage(1),
+            RootMessage.RepeatedMessage(2),
+            RootMessage.RepeatedMessage(3),
+            RootMessage.RepeatedMessage(4),
+        ))
+        val encodedOriginal = original.toByteArray()
+        val patch = original.edit {
+            repeatMe {
                 remove(RootMessage.RepeatedMessage(3))
             }
         }
 
-        val edited = patch.value
         val encodedPatched = encodedOriginal.applyChanges(patch.changes)
         val patched = RootMessage.fromByteArray(encodedPatched)
 
-        assertEquals("testing", edited.str)
-        assertEquals(listOf(1, 2, 4), edited.repeatMe.map { it.repeatedInt })
-        assertEquals(edited, patched)
+        assertEquals("testing", patched.str)
+        assertEquals(listOf(1, 2, 4), patched.repeatMe.map { it.repeatedInt })
     }
 }

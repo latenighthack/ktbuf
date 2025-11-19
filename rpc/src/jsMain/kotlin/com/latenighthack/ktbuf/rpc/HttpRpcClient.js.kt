@@ -74,7 +74,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         return httpPost(serverPath, headers, method.toPath(""), secure, request)
     }
 
-    private class WebSocketServerStream(private val webSocket: WebSocket) : RpcServerStream {
+    private class WebSocketServerStream(private val webSocket: WebSocket, private val readyCallback: () -> Unit) : RpcServerStream {
         private val receiveChannel = Channel<ByteArray>()
         private var doOnReady: (() -> Unit)? = null
         private var isReady = false
@@ -83,6 +83,8 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             webSocket.onopen = {
                 isReady = true
                 doOnReady?.invoke()
+
+                readyCallback()
             }
             webSocket.onclose = {
                 window.setTimeout({
@@ -134,11 +136,19 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 doOnReady?.invoke()
             }
         }
+
+        override suspend fun closeOutbound() {
+        }
+
+        override suspend fun closeInbound() {
+            receiveChannel.close()
+        }
     }
 
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
-        block: suspend RpcServerStream.() -> Unit
+        block: suspend RpcServerStream.() -> Unit,
+        readyCallback: () -> Unit
     ) {
         if (isNode) {
             js("global.WebSocket = require('websocket').w3cwebsocket")
@@ -151,7 +161,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             method.toPath(serverWsUrl)
         }
         val webSocket = WebSocket(wsUrl)
-        val stream = WebSocketServerStream(webSocket)
+        val stream = WebSocketServerStream(webSocket, readyCallback)
 
         stream.block()
     }

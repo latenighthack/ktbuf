@@ -14,15 +14,18 @@ interface ServerTarget {
 
 class RemoteServer(override val serverUrl: String): ServerTarget
 
-fun runTestWithServer(
-    extensions: Application.() -> Unit = {},
-    runner: suspend CoroutineScope.(server: TestServer) -> Unit
+fun <T> runTestWithServer(
+    extensions: suspend Application.() -> T? = { null },
+    runner: suspend CoroutineScope.(server: TestServer, context: T?) -> Unit
 ) = runTest {
     val server = TestServer()
+    var context: T? = null
 
-    server.start()
+    server.start({
+        context = extensions()
+    })
 
-    runner(server)
+    runner(server, context)
 
     server.stop()
 }
@@ -54,7 +57,7 @@ class TestServer(val port: Int = randomPort()): ServerTarget {
     private var server: EmbeddedServer<*, *>? = null
     private var serverStopped = CompletableDeferred<Boolean>()
 
-    suspend fun start(extensions: Application.() -> Unit = {}) {
+    suspend fun start(extensions: suspend Application.() -> Unit = {}) {
         server = defaultServer(config = {
             connector {
                 this.port = this@TestServer.port

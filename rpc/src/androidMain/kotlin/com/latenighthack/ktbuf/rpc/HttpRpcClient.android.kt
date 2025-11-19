@@ -94,11 +94,20 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         override suspend fun send(bytes: ByteArray) {
             outbound.send(bytes)
         }
+
+        override suspend fun closeOutbound() {
+            outbound.close()
+        }
+
+        override suspend fun closeInbound() {
+            inbound.close()
+        }
     }
 
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
-        block: suspend RpcServerStream.() -> Unit
+        block: suspend RpcServerStream.() -> Unit,
+        readyCallback: () -> Unit
     ) {
         var globalException: Throwable? = null
         val context = StreamContext()
@@ -120,6 +129,8 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         val webSocket = client.newWebSocket(requestData, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 super.onOpen(webSocket, response)
+
+                readyCallback()
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -162,7 +173,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 super.onMessage(webSocket, bytes)
 
                 GlobalScope.launch {
-                    context.inbound.send(bytes.toByteArray())
+                    if (!context.inbound.isClosedForSend) {
+                        context.inbound.send(bytes.toByteArray())
+                    }
                 }
             }
 
@@ -170,7 +183,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 super.onMessage(webSocket, text)
 
                 GlobalScope.launch {
-                    context.inbound.send(text.toByteArray())
+                    if (!context.inbound.isClosedForSend) {
+                        context.inbound.send(text.toByteArray())
+                    }
                 }
             }
         })

@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.jvm.tasks.Jar
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -92,7 +93,7 @@ android {
 }
 
 mavenPublishing {
-    coordinates("com.latenighthack.ktbuf", "ktbuf-patch", "1.1.0")
+    coordinates("com.latenighthack.ktbuf", "ktbuf-patch", "1.1.1")
 
     pom {
         name.set("KtBuf")
@@ -119,8 +120,4 @@ mavenPublishing {
             developerConnection.set("scm:git:ssh://git@github.com/latenighthack/ktbuf.git")
         }
     }
-}
-
-tasks.withType<JavaCompile> {
-    dependsOn("generateDebugProto")
 }

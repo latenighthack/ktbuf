@@ -10,5 +10,9 @@ public expect class HttpRpcClient(serverPath: String, useApiGateway: Boolean = f
 
     override suspend fun unaryCall(method: RpcMethodSpecifier, headers: Map<String, String>, request: ByteArray): RpcResponse
 
-    override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit)
+    override suspend fun serverStreamingCall(
+        method: RpcMethodSpecifier,
+        block: suspend RpcServerStream.() -> Unit,
+        readyCallback: () -> Unit
+    )
 }

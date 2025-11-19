@@ -10,7 +10,10 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.selects.whileSelect
 
 fun ApplicationCall.toGrpcRequestContext(
     descriptor: ServerDescriptor,
@@ -31,9 +34,9 @@ public fun <Server: Any> Routing.serveAll(
 ) {
     for (method in descriptor.methods) {
         if (method.streamingIn && method.streamingOut) {
-            TODO()
+            serveStreamingInOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
         } else if (method.streamingIn) {
-            TODO()
+            serveStreamingInOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
         } else if (method.streamingOut) {
             serveStreamingOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
         } else {
@@ -109,16 +112,99 @@ public fun <Server: Any> Routing.serveStreamingOut(
                         else -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
                     }
                 }
-                .collect { outgoing ->
+                .collect { event ->
                     val outStream = ProtobufOutputStream()
 
-                    outStream.write { writer ->
-                        methodDescriptor.responseSerializer.invoke(writer, outgoing)
+                    when (event) {
+                        is StreamControlEvent.Close<*> -> {
+                            close()
+                        }
+                        is StreamControlEvent.Message<*> -> {
+                            val outgoing = event.message
+
+                            outStream.write { writer ->
+                                methodDescriptor.responseSerializer.invoke(writer, outgoing)
+                            }
+
+                            val outgoingBytes = outStream.toByteArray()
+
+                            send(outgoingBytes)
+                        }
                     }
+                }
+        } catch (rpcException: RpcResponseException) {
+            close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))
+        } catch (t: Throwable) {
+            close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
+        }
+    }
+}
 
-                    val outgoingBytes = outStream.toByteArray()
 
-                    send(outgoingBytes)
+public fun <Server: Any> Routing.serveStreamingInOut(
+    server: Server,
+    descriptor: ServerDescriptor,
+    methodDescriptor: ServerMethodDescriptor<Any, Any, Server>,
+    contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
+) {
+    webSocket("/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}") {
+        val handler = (methodDescriptor.handler as ServerMethod.ClientServerStreaming).handler
+        val context = contextProcessor(call.toGrpcRequestContext(
+            descriptor,
+            methodDescriptor
+        ))
+
+        val requestFlow = channelFlow {
+            whileSelect {
+                incoming.onReceiveCatching {
+                    if (it.isSuccess) {
+                        val stream = ProtobufInputStream()
+                        val frame = it.getOrNull()!!
+
+                        stream.addBytes(frame.readBytes())
+
+                        val request = stream.read(methodDescriptor.requestParser)
+
+                        this@channelFlow.send(request)
+
+                        true
+                    } else {
+                        incoming.cancel()
+                        this@channelFlow.close()
+                        false
+                    }
+                }
+            }
+        }
+
+        try {
+            handler(server, context, requestFlow)
+                .onCompletion {
+                    when (it) {
+                        null -> close(CloseReason(CloseReason.Codes.NORMAL, ""))
+                        is RpcResponseException -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, it.errorMessage))
+                        else -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
+                    }
+                }
+                .collect { event ->
+                    val outStream = ProtobufOutputStream()
+
+                    when (event) {
+                        is StreamControlEvent.Close<*> -> {
+                            close()
+                        }
+                        is StreamControlEvent.Message<*> -> {
+                            val outgoing = event.message
+
+                            outStream.write { writer ->
+                                methodDescriptor.responseSerializer.invoke(writer, outgoing)
+                            }
+
+                            val outgoingBytes = outStream.toByteArray()
+
+                            send(outgoingBytes)
+                        }
+                    }
                 }
         } catch (rpcException: RpcResponseException) {
             close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))

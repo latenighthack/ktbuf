@@ -80,7 +80,11 @@ class StubRpcClient : RpcClient {
     private val handlers = mutableListOf<UnaryHandler>()
     private val streamingHandlers = mutableListOf<UnaryHandler>()
 
-    override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit) {
+    override suspend fun serverStreamingCall(
+        method: RpcMethodSpecifier,
+        block: suspend RpcServerStream.() -> Unit,
+        readyCallback: () -> Unit
+    ) {
     }
 
     override suspend fun unaryCall(

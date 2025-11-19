@@ -55,7 +55,7 @@ android {
 }
 
 mavenPublishing {
-    coordinates("com.latenighthack.ktbuf", "ktbuf-library", "1.1.0")
+    coordinates("com.latenighthack.ktbuf", "ktbuf-library", "1.1.1")
 
     pom {
         name.set("KtBuf")
