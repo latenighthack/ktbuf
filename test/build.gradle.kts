@@ -32,5 +32,5 @@ dependencies {
 }
 
 mavenPublishing {
-    coordinates("com.latenighthack.ktbuf", "ktbuf-test", "1.1.1")
+    coordinates("com.latenighthack.ktbuf", "ktbuf-test", "1.1.2")
 }
