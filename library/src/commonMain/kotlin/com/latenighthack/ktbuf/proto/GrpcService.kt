@@ -8,9 +8,7 @@ import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
 import com.latenighthack.ktbuf.net.RpcMethodSpecifier
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.*
 
 open class GrpcService(private val rpc: RpcClient, private val packageName: String, private val serviceName: String) {
     data class MethodDescriptor<Req : Any, Res : Any>(
@@ -44,6 +42,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         request: RequestType,
         writeRequest: RequestType.(ProtobufWriter) -> Unit,
         readResponse: (ProtobufReader) -> ResponseType,
+        generateExtraParams: ((RequestType) -> Map<String, String>)? = null,
         readyCallback: () -> Unit = {}
     ): Flow<ResponseType> = channelFlow {
         val requestBytes = ProtobufOutputStream()
@@ -54,8 +53,10 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             }
             .toByteArray()
 
+        val extraParams = generateExtraParams?.let { it(request) } ?: emptyMap()
+
         rpc.serverStreamingCall(
-            RpcMethodSpecifier(packageName, serviceName, methodName),
+            RpcMethodSpecifier(packageName, serviceName, methodName, extraParams),
             {
                 send(requestBytes)
                 readyCallback()
@@ -97,10 +98,12 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         request: RequestType,
         writeRequest: RequestType.(ProtobufWriter) -> Unit,
         readResponse: (ProtobufReader) -> ResponseType,
+        generateExtraParams: ((RequestType) -> Map<String, String>)? = null,
         readyCallback: () -> Unit = {}
     ): ResponseType {
+        val extraParams = generateExtraParams?.let { it(request) } ?: emptyMap()
         return rpc.unaryCall(
-            RpcMethodSpecifier(packageName, serviceName, methodName), emptyMap(),
+            RpcMethodSpecifier(packageName, serviceName, methodName, extraParams), emptyMap(),
             ProtobufOutputStream()
                 .also {
                     it.write {
@@ -110,6 +113,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
                 .toByteArray()
         )
             .let { response ->
+                readyCallback()
                 ProtobufInputStream()
                     .let { stream ->
                         stream.addBytes(response.data)
@@ -120,19 +124,37 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             }
     }
 
+    @OptIn(InternalCoroutinesApi::class)
     protected fun <RequestType, ResponseType> clientStreamServerStream(
         methodName: String,
         request: Flow<RequestType>,
         writeRequest: RequestType.(ProtobufWriter) -> Unit,
         readResponse: (ProtobufReader) -> ResponseType,
+        generateExtraParams: ((RequestType) -> Map<String, String>)? = null,
         readyCallback: () -> Unit = {}
     ): Flow<ResponseType> = channelFlow {
+        val completion = CompletableDeferred<Unit>()
+        val shared = request
+            .onCompletion { cause ->
+                if (cause == null) {
+                    completion.complete(Unit)
+                } else {
+                    completion.completeExceptionally(cause)
+                    throw cause
+                }
+            }
+            .shareIn(this, SharingStarted.Eagerly, replay = 1)
+
+        val first = shared.first()
+
+        val extraParams = generateExtraParams?.invoke(first) ?: emptyMap()
+
         rpc.serverStreamingCall(
-            RpcMethodSpecifier(packageName, serviceName, methodName),
+            RpcMethodSpecifier(packageName, serviceName, methodName, extraParams),
             {
                 var keepGoing = true
-                val requestJob = GlobalScope.launch {
-                    request
+                val requestJob = launch {
+                    shared
                         .onCompletion {
                             keepGoing = false
                             closeInbound()
@@ -148,6 +170,11 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
 
                             send(requestBytes)
                         }
+                }
+
+                launch {
+                    completion.await()
+                    requestJob.cancel()
                 }
 
                 try {

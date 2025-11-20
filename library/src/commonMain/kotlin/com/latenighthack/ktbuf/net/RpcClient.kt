@@ -5,7 +5,7 @@ import com.latenighthack.ktbuf.ProtobufWriter
 import com.latenighthack.ktbuf.proto.Codes
 import kotlinx.coroutines.flow.Flow
 
-fun RpcMethodSpecifier.toPath(serverPath: String) = "${serverPath}/api/${packageName}.${serviceName}/${methodName}"
+fun RpcMethodSpecifier.toPath(serverPath: String) = "${serverPath}/api/${packageName}.${serviceName}/${methodName}${if (additionalParameters.isNotEmpty()) { "?" } else { "" }}${additionalParameters.map { "${it.key}=${it.value}" }.joinToString("&")}"
 fun RpcMethodSpecifier.toApiGatewayPath(serverPath: String) = "${serverPath}/ws_${packageName.replace('.', '_')}_${serviceName.replace('.', '_')}_${methodName}"
 
 data class GrpcRequestContext(
@@ -172,7 +172,8 @@ class RpcResponseException(val path: String, val verb: String, val code: Codes, 
 data class RpcMethodSpecifier(
     val packageName: String,
     val serviceName: String,
-    val methodName: String
+    val methodName: String,
+    val additionalParameters: Map<String, String> = emptyMap()
 )
 
 class RpcResponse(val data: ByteArray, val headers: Map<String, String>)
