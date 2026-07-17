@@ -8,6 +8,7 @@ import io.ktor.server.application.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlin.test.Test
 
 fun Application.attachTestServices() {
@@ -35,19 +36,19 @@ fun Application.attachTestServices() {
 }
 
 class DummyServer {
-    fun placeholder(context: GrpcRequestContext, request: Flow<Any>): Flow<Any> {
+    fun placeholder(context: GrpcRequestContext, request: Flow<Any>): Flow<StreamControlEvent<Any>> {
         return flow {
             request.collect {
                 println("Hello")
                 emit(Unit)
             }
-        }
+        }.map { StreamControlEvent.Message(it) }
     }
 }
 
 class ServerTests {
     @Test
-    fun testServerRuns() = runTestWithServer(Application::attachTestServices) { server ->
+    fun testServerRuns() = runTestWithServer(Application::attachTestServices) { server, _ ->
         val client = HttpRpcClient(server.serverUrl)
         client.serverStreamingCall(
             RpcMethodSpecifier("com.latenighthack", "Dummy", "Placeholder"),
@@ -58,6 +59,7 @@ class ServerTests {
                     println("World")
                 }
             },
+            {},
         )
     }
 }

@@ -16,7 +16,7 @@ internal class ConcreteLinkedByteArray(private val bufferSize: Int = defaultBuff
         val targetSize = max(cachedSize, destinationOffset + 1)
 
         if (buffer.size < targetSize) {
-            buffer = buffer.copyOf(cachedSize * 4 / 3)
+            buffer = buffer.copyOf(max(targetSize, buffer.size * 4 / 3))
         }
         cachedSize = targetSize
 
@@ -27,7 +27,7 @@ internal class ConcreteLinkedByteArray(private val bufferSize: Int = defaultBuff
         val targetSize = max(cachedSize, destinationOffset + length)
 
         if (buffer.size < targetSize) {
-            buffer = buffer.copyOf(cachedSize * 4 / 3)
+            buffer = buffer.copyOf(max(targetSize, buffer.size * 4 / 3))
         }
         cachedSize = targetSize
 
