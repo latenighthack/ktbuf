@@ -24,20 +24,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-
-      - name: Install protoc-gen-kt (Kotlin protoc plugin)
-        env:
-          # Keep in sync with kitkit's CI pin. Bump deliberately and regenerate.
-          PROTOC_GEN_KT_VERSION: v0.0.0-20251214023608-0fa742406fbf
-        run: |
-          # The :patch proto codegen shells out to `protoc-gen-kt` on PATH.
-          go install "latenighthack.com/protoc-gen-kt@${PROTOC_GEN_KT_VERSION}"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
@@ -53,7 +39,9 @@ jobs:
           fi
 
       - name: Publish and release
-        run: ./gradlew publishToMavenCentral --no-configuration-cache --stacktrace
+        # :patch is excluded — its protoc plugin (protoc-gen-kt-patch) no longer exists and
+        # nothing consumes ktbuf-patch; the published set matches what consumers use.
+        run: ./gradlew :library:publishToMavenCentral :rpc:publishToMavenCentral :server:publishToMavenCentral :test:publishToMavenCentral --no-configuration-cache --stacktrace
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
