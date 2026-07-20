@@ -7,6 +7,7 @@ import com.latenighthack.ktbuf.net.RpcClient
 import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
 import com.latenighthack.ktbuf.net.RpcMethodSpecifier
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.*
 
@@ -133,19 +134,35 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         generateExtraParams: ((RequestType) -> Map<String, String>)? = null,
         readyCallback: () -> Unit = {}
     ): Flow<ResponseType> = channelFlow {
-        val completion = CompletableDeferred<Unit>()
-        val shared = request
-            .onCompletion { cause ->
-                if (cause == null) {
-                    completion.complete(Unit)
-                } else {
-                    completion.completeExceptionally(cause)
-                    throw cause
-                }
-            }
-            .shareIn(this, SharingStarted.Eagerly, replay = 1)
+        // Lossless, ordered request pipeline. The previous shareIn(replay = 1) dropped any
+        // request emitted between the first() peek and the transport's subscription — a client
+        // that follows its open with an immediate second request (pending acks) lost the open
+        // itself and could never establish the stream.
+        val firstRequest = CompletableDeferred<RequestType>()
+        val requests = Channel<RequestType>(Channel.UNLIMITED)
 
-        val first = shared.first()
+        launch {
+            try {
+                request.collect { nextRequest ->
+                    if (!firstRequest.isCompleted) {
+                        firstRequest.complete(nextRequest)
+                    }
+                    requests.send(nextRequest)
+                }
+                if (!firstRequest.isCompleted) {
+                    firstRequest.completeExceptionally(NoSuchElementException("request flow completed without emitting"))
+                }
+            } catch (cause: Throwable) {
+                if (!firstRequest.isCompleted) {
+                    firstRequest.completeExceptionally(cause)
+                }
+                throw cause
+            } finally {
+                requests.close()
+            }
+        }
+
+        val first = firstRequest.await()
 
         val extraParams = generateExtraParams?.invoke(first) ?: emptyMap()
 
@@ -154,12 +171,8 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             {
                 var keepGoing = true
                 val requestJob = launch {
-                    shared
-                        .onCompletion {
-                            keepGoing = false
-                            closeInbound()
-                        }
-                        .collect { nextRequest ->
+                    try {
+                        for (nextRequest in requests) {
                             val requestBytes = ProtobufOutputStream()
                                 .also {
                                     it.write {
@@ -170,11 +183,11 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
 
                             send(requestBytes)
                         }
-                }
-
-                launch {
-                    completion.await()
-                    requestJob.cancel()
+                    } finally {
+                        // Request side exhausted (flow completed and queue drained) or cancelled.
+                        keepGoing = false
+                        closeInbound()
+                    }
                 }
 
                 try {
