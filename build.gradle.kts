@@ -14,7 +14,7 @@ plugins {
 
 allprojects {
     group = "com.latenighthack.ktbuf"
-    version = "1.1.3"
+    version = "1.1.4"
 
     repositories {
         mavenCentral()
@@ -29,7 +29,11 @@ subprojects {
         configure<MavenPublishBaseExtension> {
             configureBasedOnAppliedPlugins(true, true)
             publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL, automaticRelease = true)
-            signAllPublications()
+            // Sign only when a key is configured (CI release); a local publishToMavenLocal for
+            // SNAPSHOT consumption has no signatory and must not fail on the signing task.
+            if (providers.gradleProperty("signingInMemoryKey").isPresent) {
+                signAllPublications()
+            }
             pom {
                 name.set(project.name)
                 description.set("Native protocol buffers for Kotlin.")

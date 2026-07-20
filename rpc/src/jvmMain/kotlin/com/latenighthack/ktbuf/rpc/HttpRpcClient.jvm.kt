@@ -84,7 +84,11 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
     }
 
     private class StreamContext : RpcServerStream {
-        val inbound = Channel<ByteArray>()
+        // Unlimited inbound: messages are handed over synchronously from the OkHttp listener
+        // thread (ordered), and a close still lets already-buffered messages drain. A rendezvous
+        // channel + async launch loses the final message(s) when the server closes right after
+        // sending — e.g. an error response followed by a close frame.
+        val inbound = Channel<ByteArray>(Channel.UNLIMITED)
         val outbound = Channel<ByteArray>(1)
         val isReady = CompletableDeferred<Unit>()
 
@@ -147,7 +151,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 super.onClosing(webSocket, code, reason)
 
-                job.cancel()
+                // Close (don't cancel): the block drains any buffered inbound messages, then
+                // receive() throws Closed and the block winds down on its own.
+                context.inbound.close()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -182,8 +188,6 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 super.onClosed(webSocket, code, reason)
 
-                job.cancel()
-
                 context.inbound.close()
                 context.outbound.close()
             }
@@ -191,21 +195,15 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                 super.onMessage(webSocket, bytes)
 
-                GlobalScope.launch {
-                    if (!context.inbound.isClosedForSend) {
-                        context.inbound.send(bytes.toByteArray())
-                    }
-                }
+                // Synchronous handoff on the listener thread keeps message order and beats any
+                // subsequent close; trySend never suspends thanks to the unlimited buffer.
+                context.inbound.trySend(bytes.toByteArray())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 super.onMessage(webSocket, text)
 
-                GlobalScope.launch {
-                    if (!context.inbound.isClosedForSend) {
-                        context.inbound.send(text.toByteArray())
-                    }
-                }
+                context.inbound.trySend(text.toByteArray())
             }
         })
 
