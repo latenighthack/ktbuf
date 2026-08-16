@@ -95,6 +95,28 @@ fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?): Status {
     return Status(code, "$httpCode - ${message.orEmpty()}")
 }
 
+// Inverse of [fromHTTPCode]: the HTTP status a server should answer with for a gRPC code.
+fun Codes.toHttpCode(): Int = when (this) {
+    Codes.OK -> 200
+    Codes.CANCELLED -> 499
+    Codes.UNKNOWN -> 500
+    Codes.INVALID_ARGUMENT -> 400
+    Codes.DEADLINE_EXCEEDED -> 504
+    Codes.NOT_FOUND -> 404
+    Codes.ALREADY_EXISTS -> 409
+    Codes.PERMISSION_DENIED -> 403
+    Codes.RESOURCE_EXHAUSTED -> 429
+    Codes.FAILED_PRECONDITION -> 400
+    Codes.ABORTED -> 409
+    Codes.OUT_OF_RANGE -> 400
+    Codes.UNIMPLEMENTED -> 501
+    Codes.INTERNAL -> 500
+    Codes.UNAVAILABLE -> 503
+    Codes.DATA_LOSS -> 500
+    Codes.UNAUTHENTICATED -> 401
+    Codes.CLIENT_TIMEOUT -> 408
+}
+
 fun Status.Companion.fromWSCode(wsCode: Int, message: String?): Status {
     val code = when (wsCode) {
         1000 -> Codes.OK

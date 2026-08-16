@@ -64,7 +64,7 @@ class MainQueueDispatcher: CoroutineDispatcher(), Delay {
 private val mainDispatcher = MainQueueDispatcher()
 
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
-    @OptIn(ExperimentalForeignApi::class)
+    @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
         headers: Map<String, String>,
@@ -93,9 +93,25 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 )
             } else {
                 val httpResponse = response as NSHTTPURLResponse
-                val headers = httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
-                val responseData = data?.toByteArray() ?: byteArrayOf()
-                continuation.resume(RpcResponse(data = responseData, headers = headers))
+                val statusCode = httpResponse.statusCode.toInt()
+                if (statusCode < 200 || statusCode > 299) {
+                    val errorMessage = data?.let {
+                        NSString.create(data = it, encoding = NSUTF8StringEncoding)?.toString()
+                    } ?: ""
+                    val status = Status.fromHTTPCode(statusCode, errorMessage)
+                    continuation.resumeWithException(
+                        RpcResponseException(
+                            path = url,
+                            verb = "POST",
+                            code = status.code,
+                            errorMessage = status.message
+                        )
+                    )
+                } else {
+                    val headers = httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
+                    val responseData = data?.toByteArray() ?: byteArrayOf()
+                    continuation.resume(RpcResponse(data = responseData, headers = headers))
+                }
             }
         }
         task.resume()

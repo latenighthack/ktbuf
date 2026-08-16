@@ -3,6 +3,7 @@ package com.latenighthack.ktbuf.server
 import com.latenighthack.ktbuf.ProtobufInputStream
 import com.latenighthack.ktbuf.ProtobufOutputStream
 import com.latenighthack.ktbuf.net.*
+import com.latenighthack.ktbuf.proto.toHttpCode
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -76,11 +77,14 @@ public fun <Server: Any> Routing.serveUnary(
 
             call.respond(outgoingBytes)
         } catch (rpcException: RpcResponseException) {
-            call.respond(HttpStatusCode(rpcException.code.value, rpcException.errorMessage))
+            call.respondText(
+                rpcException.errorMessage,
+                status = HttpStatusCode(rpcException.code.toHttpCode(), rpcException.code.name)
+            )
         } catch (t: Throwable) {
             println("gRPC unary error($path): $t")
             t.printStackTrace()
-            call.respond(HttpStatusCode.InternalServerError, t.toString() + "\n" + t.stackTraceToString())
+            call.respondText(t.toString(), status = HttpStatusCode.InternalServerError)
         }
     }
 }

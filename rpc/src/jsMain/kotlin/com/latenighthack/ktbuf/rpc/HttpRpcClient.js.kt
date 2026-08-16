@@ -22,6 +22,13 @@ import kotlin.coroutines.suspendCoroutine
 
 val isNode: Boolean = js("typeof window === 'undefined'") as Boolean
 
+// responseText is unreadable when responseType is "arraybuffer" (throws InvalidStateError);
+// decode the error body from xhr.response instead.
+internal fun XMLHttpRequest.errorBodyText(): String {
+    val response = this.response as? ArrayBuffer ?: return ""
+    return js("new TextDecoder().decode(response)") as String
+}
+
 private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<RpcResponse>) {
     if (xhr.readyState == XMLHttpRequest.DONE) {
         val headers = xhr.getAllResponseHeaders()
@@ -38,7 +45,7 @@ private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<Rp
         if (xhr.status / 100 == 2) {
             coroutineContext.resume(RpcResponse(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>(), headers))
         } else {
-            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.responseText)
+            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText())
             coroutineContext.resumeWithException(RpcResponseException(xhr.responseURL, "POST", status.code, status.message))
         }
     }
