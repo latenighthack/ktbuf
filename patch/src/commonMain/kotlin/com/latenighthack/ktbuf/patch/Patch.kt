@@ -229,6 +229,47 @@ private fun ProtobufReader.visitField(writer: ProtobufWriter, remainingComponent
     }
 }
 
+// Removes every occurrence of the terminal (length-delimited) field whose payload
+// equals `matchMessage`, drilling through any leading path components verbatim.
+private fun ProtobufReader.visitDistinct(writer: ProtobufWriter, remainingComponents: List<Component>, matchMessage: ByteArray) {
+    val component = remainingComponents.first()
+
+    if (remainingComponents.size > 1) {
+        // Copy everything as-is, descending into the first matching container.
+        while (isByteAvailable()) {
+            nextField()
+
+            if (currentFieldNumber == component.fieldNumber) {
+                readField { reader ->
+                    writer.encode(component.fieldNumber) {
+                        reader.visitDistinct(this, remainingComponents.drop(1), matchMessage)
+                    }
+                }
+            } else {
+                writer.encodeRaw(skipField())
+            }
+        }
+
+        return
+    }
+
+    while (isByteAvailable()) {
+        nextField()
+
+        if (currentFieldNumber == component.fieldNumber) {
+            val payload = readBytes()
+
+            if (!payload.contentEquals(matchMessage)) {
+                writer.encode(component.fieldNumber) {
+                    encodeRaw(payload)
+                }
+            }
+        } else {
+            writer.encodeRaw(skipField())
+        }
+    }
+}
+
 private fun ProtobufReader.applyChange(change: Change): ByteArray {
     val output = ProtobufOutputStream()
 
@@ -263,7 +304,8 @@ private fun ProtobufReader.applyChange(change: Change): ByteArray {
             }
 
             is Change.InsertDistinct -> TODO()
-            is Change.RemoveDistinct -> TODO()
+            is Change.RemoveDistinct ->
+                visitDistinct(writer, change.path.components, change.message)
         }
     }
 

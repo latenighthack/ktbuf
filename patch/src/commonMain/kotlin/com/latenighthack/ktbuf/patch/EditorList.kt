@@ -16,10 +16,21 @@ open class EditorList<T>(
     }
 
     override fun remove(element: T): Boolean {
+        val index = backingList.indexOf(element)
+
+        if (index < 0) {
+            return false
+        }
+
         val bytesToMatch = element.writer()
         context.remove(fieldNumber, bytesToMatch)
 
-        return super.remove(element)
+        // Remove from the backing list directly: routing through super.remove()
+        // would dispatch to the overridden removeAt() and emit a second,
+        // index-based change on top of the distinct one.
+        backingList.removeAt(index)
+
+        return true
     }
 
     override fun removeAt(index: Int): T {
