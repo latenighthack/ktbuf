@@ -12,6 +12,9 @@ kotlin {
     }
     js {
         browser()
+        // Node as well as browser: commonTest previously never ran on JS at all, and
+        // jsNodeTest needs no browser binary in CI.
+        nodejs()
     }
     androidTarget {
         publishLibraryVariants("release")

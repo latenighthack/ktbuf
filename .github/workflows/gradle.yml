@@ -22,17 +22,37 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: iosSimulatorArm64Test
+          # Targets are qualified per module rather than run as bare task names.
+          # A bare `jvmTest` would also pull in :patch, whose protoc plugin
+          # (protoc-gen-kt-patch) no longer exists, so its test sources cannot compile
+          # -- the same reason release.yml skips publishing it.
+          #
+          # Apple targets. iosArm64 is device-only and has no test task.
+          - target: ':library:iosSimulatorArm64Test :conformance:iosSimulatorArm64Test'
             os: macos-latest
-          - target: macosArm64Test
+          - target: ':library:macosArm64Test :conformance:macosArm64Test'
             os: macos-latest
-          - target: jvmTest
+          # The x64 Apple targets run on an Intel runner on purpose: Kotlin/Native
+          # disables a test task it cannot execute on the host, so on arm64
+          # macos-latest these link but never run and the job goes green having
+          # tested nothing.
+          - target: ':library:iosX64Test :conformance:iosX64Test'
+            os: macos-13
+          - target: ':library:macosX64Test :conformance:macosX64Test'
+            os: macos-13
+          - target: ':library:jvmTest :conformance:jvmTest'
             os: ubuntu-latest
-          - target: linuxX64Test
+          - target: ':library:linuxX64Test :conformance:linuxX64Test'
             os: ubuntu-latest
-          - target: testDebugUnitTest
+          # commonTest never ran on JS before; jsNodeTest needs no browser binary.
+          - target: ':library:jsNodeTest :conformance:jsNodeTest'
             os: ubuntu-latest
-          - target: testReleaseUnitTest
+          - target: ':library:testDebugUnitTest :conformance:testDebugUnitTest'
+            os: ubuntu-latest
+          - target: ':library:testReleaseUnitTest :conformance:testReleaseUnitTest'
+            os: ubuntu-latest
+          # JVM-only module: the live HTTP/WebSocket transport round-trips.
+          - target: ':server:test'
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}
 
@@ -50,6 +70,21 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+    # The :conformance module generates its Kotlin from conformance.proto at build
+    # time, so both protoc and the protoc-gen-kt plugin must be on PATH.
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    - name: Install protoc
+      uses: arduino/setup-protoc@v3
+      with:
+        version: '25.1'
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Install protoc-gen-kt
+      run: |
+        go install latenighthack.com/protoc-gen-kt@v0.1.0
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
     - name: Build with Gradle
       uses: gradle/gradle-build-action@ce999babab2de1c4b649dc15f0ee67e6246c994f
       with:

@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package conformance.v1;
+
+option java_package = "com.latenighthack.ktbuf.conformance.v1";
+
+// Fixture for the generated-code conformance tests. It deliberately covers every
+// proto3 feature protoc-gen-kt can currently emit, so the golden tests exercise the
+// generated encoder/decoder rather than only the hand-written codec.
+//
+// Two proto3 features are absent on purpose -- protoc-gen-kt cannot generate them:
+//   * map<K,V>       -- the generator crashes (nil pointer in its builder template)
+//   * optional (explicit presence) -- the generator rejects the file outright
+// Adding either one back will break the build, not just the tests.
+message AllTypes {
+    int32 f_int32 = 1;
+    int64 f_int64 = 2;
+    uint32 f_uint32 = 3;
+    uint64 f_uint64 = 4;
+    sint32 f_sint32 = 5;
+    sint64 f_sint64 = 6;
+    fixed32 f_fixed32 = 7;
+    fixed64 f_fixed64 = 8;
+    sfixed32 f_sfixed32 = 9;
+    sfixed64 f_sfixed64 = 10;
+    float f_float = 11;
+    double f_double = 12;
+    bool f_bool = 13;
+    string f_string = 14;
+    bytes f_bytes = 15;
+
+    // Non-contiguous values so encoding by ordinal is detectable.
+    enum Kind {
+        UNKNOWN = 0;
+        A = 3;
+        B = 4;
+        C = 5;
+    }
+    Kind f_enum = 16;
+
+    Inner f_inner = 17;
+
+    repeated int32 r_int32 = 18;
+    repeated string r_string = 19;
+    repeated Inner r_inner = 20;
+
+    // Field numbers past 15 use a two-byte tag; 2048 pushes it to three.
+    int32 f_high_field = 2048;
+
+    message Inner {
+        string str = 1;
+        int32 an_int = 2;
+        InnerInner inner_inner = 3;
+    }
+
+    message InnerInner {
+        string str = 5;
+        int32 an_int = 6;
+    }
+}
+
+message OneOfHolder {
+    int32 lead = 1;
+
+    oneof choice {
+        int32 c_int = 2;
+        string c_string = 3;
+        AllTypes.Inner c_inner = 4;
+    }
+}
+
+// Empty messages are a real wire case: they encode to zero bytes.
+message Empty {
+}
+
+// The three call shapes that work end to end. Client streaming (stream in, unary
+// out) is intentionally missing: GrpcService has no clientStreamServerUnary helper,
+// so protoc-gen-kt emits a client that does not compile, and serveAll would route it
+// to serveStreamingInOut and cast the handler to the wrong ServerMethod subtype.
+service Conformance {
+    rpc Unary(AllTypes) returns (AllTypes);
+    rpc ServerStream(AllTypes) returns (stream AllTypes);
+    rpc Bidi(stream AllTypes) returns (stream AllTypes);
+}

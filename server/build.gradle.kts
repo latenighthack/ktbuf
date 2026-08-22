@@ -29,6 +29,9 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(project(":test"))
     testImplementation(project(":rpc"))
+    // Generated typed messages/services, so the transport tests exercise the same
+    // code path a real consumer uses rather than hand-rolled descriptors.
+    testImplementation(project(":conformance"))
 }
 
 mavenPublishing {
