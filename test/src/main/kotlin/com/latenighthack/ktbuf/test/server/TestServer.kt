@@ -6,7 +6,6 @@ import io.ktor.server.engine.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.runTest
-import kotlin.random.Random
 
 interface ServerTarget {
     val serverUrl: String
@@ -30,26 +29,22 @@ fun <T> runTestWithServer(
     server.stop()
 }
 
-class TestServer(val port: Int = randomPort()): ServerTarget {
-    companion object {
-        private val activePorts = mutableSetOf<Int>()
-        private fun randomPort(): Int {
-            var port: Int
-
-            while (true) {
-                port = Random.nextInt(49152, 65535)
-
-                if (activePorts.contains(port)) {
-                    continue
-                }
-
-                activePorts.add(port)
-                break
-            }
-
-            return port
-        }
-    }
+/**
+ * An embedded test server.
+ *
+ * By default ([requestedPort] == 0) the server binds an OS-assigned free port: the
+ * kernel hands out a guaranteed-unused port atomically at bind time, so [start] can
+ * never lose a race to a port that is already taken. The previous implementation
+ * guessed a random port in 49152..65535 and merely deduped against ports it had
+ * handed out itself — but that range overlaps the OS ephemeral range used by outbound
+ * client sockets, so a guessed port could already be in use and `start()` would throw
+ * BindException intermittently. Pass an explicit [requestedPort] only when a test needs
+ * a fixed, known port. The actually-bound port is exposed as [port] after [start].
+ */
+class TestServer(private val requestedPort: Int = 0): ServerTarget {
+    /** The port the server is actually bound to. Only meaningful after [start]. */
+    var port: Int = requestedPort
+        private set
 
     override val serverUrl: String
         get() = "0.0.0.0:$port"
@@ -58,13 +53,18 @@ class TestServer(val port: Int = randomPort()): ServerTarget {
     private var serverStopped = CompletableDeferred<Boolean>()
 
     suspend fun start(extensions: suspend Application.() -> Unit = {}) {
-        server = defaultServer(config = {
+        val started = defaultServer(config = {
             connector {
-                this.port = this@TestServer.port
+                this.port = requestedPort
             }
         }, extensions)
+        server = started
 
-        server?.monitor?.subscribe(ApplicationStopped) {
+        // Read the port the OS actually bound. When requestedPort is 0 this is the
+        // kernel-assigned free port; when a fixed port was requested it echoes it back.
+        port = started.engine.resolvedConnectors().first().port
+
+        started.monitor.subscribe(ApplicationStopped) {
             serverStopped.complete(true)
         }
     }
