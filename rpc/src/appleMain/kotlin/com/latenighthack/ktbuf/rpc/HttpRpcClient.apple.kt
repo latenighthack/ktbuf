@@ -132,6 +132,10 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl)
 
         val webSocketTask = NSURLSession.sharedSession.webSocketTaskWithRequest(urlRequest)
+        // Foundation defaults to 1 MiB, smaller than ordinary streamed RPC
+        // snapshots (for example a full game frame set). Keep a bounded receive
+        // buffer, but allow the same multi-megabyte payloads as unary calls.
+        webSocketTask.maximumMessageSize = 16L * 1024 * 1024
         val serverStream = object : RpcServerStream {
             override suspend fun receive(): ByteArray = suspendCoroutine { cont ->
                 webSocketTask.receiveMessageWithCompletionHandler { message, error ->
