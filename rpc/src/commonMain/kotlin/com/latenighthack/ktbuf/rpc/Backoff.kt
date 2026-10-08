@@ -25,14 +25,18 @@ class RetryLimitExceeded() : CancellationException("[backoff] Retry limit exceed
 
 expect class AtomicReference<T>(defaultValue: T) {
     var value: T
+    fun compareAndSet(expected: T, updated: T): Boolean
 }
 
+/** Atomically updates the reference and returns its previous value.
+ * The updater can run more than once under contention and must have no side effects.
+ */
 fun <T> AtomicReference<T>.getAndUpdate(updater: T.() -> T): T {
-    val updated = updater(value)
-
-    this.value = updated
-
-    return updated
+    while (true) {
+        val previous = value
+        val updated = updater(previous)
+        if (compareAndSet(previous, updated)) return previous
+    }
 }
 
 interface BackoffContext {

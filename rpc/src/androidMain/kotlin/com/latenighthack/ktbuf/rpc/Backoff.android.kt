@@ -8,4 +8,5 @@ actual class AtomicReference<T> actual constructor(defaultValue: T) {
         set(value) {
             internalReference.set(value)
         }
+    actual fun compareAndSet(expected: T, updated: T): Boolean = internalReference.compareAndSet(expected, updated)
 }
