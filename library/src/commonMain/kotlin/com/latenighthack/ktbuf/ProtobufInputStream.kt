@@ -69,8 +69,11 @@ class ScopedProtobufReader(
 
         val tag = readVarInt()
 
-        currentFieldNumber = ProtoConstants.fieldNumberFromTag(tag.toInt())
-        currentFieldType = ProtoConstants.wireTypeFromTag(tag.toUInt())
+        require(tag <= UInt.MAX_VALUE.toULong() && tag shr 3 != 0UL && tag and 7UL <= 5UL) {
+            "Invalid protobuf tag"
+        }
+        currentFieldNumber = (tag shr 3).toInt()
+        currentFieldType = (tag and 7UL).toUInt()
 
         return true
     }
@@ -191,29 +194,16 @@ class ScopedProtobufReader(
     }
 
     private fun readVarInt(): ULong {
-        if (!isByteAvailable()) {
-            return 0U
-        }
-
-        var shift = 0
         var result = 0UL
-        var tmp = nextByte().toUByte()
-
-        while ((tmp and 0x80.toUByte()).toInt() != 0 && shift < 10) {
-            result = result or ((tmp and 0x7f.toUByte()).toULong() shl (shift * 7))
-            shift++
-
-            if (!isByteAvailable()) {
-                break
-            }
-
-            tmp = nextByte().toUByte()
+        for (index in 0 until 10) {
+            val byte = nextByte().toUByte().toUInt()
+            require(index < 9 || byte <= 1U) { "Varint exceeds 64 bits" }
+            result = result or ((byte and 0x7fU).toULong() shl (index * 7))
+            if (byte and 0x80U == 0U) return result
         }
-
-        result = result or (tmp.toULong() shl (shift * 7))
-
-        return result
+        error("Unterminated varint")
     }
+
 }
 
 class ProtobufInputStream(bufferSize: Int = 2024) {
