@@ -1,0 +1,681 @@
+[
+  {
+    "module": "conformance",
+    "target": "jsNodeTest",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialFlowTests",
+    "tests": 3,
+    "failures": 3,
+    "cases": [
+      {
+        "name": "finiteBidiRequestMustDrainAllResponses[js, node]",
+        "failure": "AssertionError: Expected <[1, 2, 3]>, actual <[1]>."
+      },
+      {
+        "name": "bidiMustPropagateReceiveErrors[js, node]",
+        "failure": "AssertionError: Expected an exception of class RpcResponseException to be thrown, but was completed successfully with the result: <[]>."
+      },
+      {
+        "name": "streamingOpenInterceptorMustRun[js, node]",
+        "failure": "AssertionError: Expected value to be true."
+      }
+    ]
+  },
+  {
+    "module": "conformance",
+    "target": "jsNodeTest",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialWireTests",
+    "tests": 25,
+    "failures": 24,
+    "cases": [
+      {
+        "name": "rejectMissingVarint[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectUnterminatedVarint[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=16384,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectElevenByteVarint[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectTruncatedFixed32[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=1,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectTruncatedBytes[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=AQAAAA,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectWrappedLength[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectFieldZero[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0,unknown=AAA)>."
+      },
+      {
+        "name": "rejectInvalidWireType[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "wrongWireTypeMustNotSetKnownField[js, node]",
+        "failure": "AssertionError: Expected <0>, actual <1>."
+      },
+      {
+        "name": "unknownGroupMustNotSetTopLevelField[js, node]",
+        "failure": "AssertionError: Expected <0>, actual <99>."
+      },
+      {
+        "name": "nestedReadsStayInsideDeclaredLength[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=7,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=Inner(str=????,anInt=0,innerInner=(null)),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "nonzeroBooleanIsTrue[js, node]",
+        "failure": "AssertionError: Expected value to be true."
+      },
+      {
+        "name": "unpackedNumericsAreAccepted[js, node]",
+        "failure": "AssertionError: Expected <[1, 2]>, actual <[18448]>."
+      },
+      {
+        "name": "duplicateMessagesMerge[js, node]",
+        "failure": "AssertionError: Expected <Inner(str=a,anInt=7,innerInner=(null))>, actual <Inner(str=,anInt=7,innerInner=(null))>."
+      },
+      {
+        "name": "sameOneofMessageMerges[js, node]",
+        "failure": "AssertionError: Expected <Inner(str=a,anInt=7,innerInner=(null))>, actual <Inner(str=,anInt=7,innerInner=(null))>."
+      },
+      {
+        "name": "negativeZeroSurvives[js, node]",
+        "failure": "AssertionError: Expected <-2147483648>, actual <0>."
+      },
+      {
+        "name": "rejectInvalidUtf8[js, node]",
+        "failure": "AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0,fDouble=0,fBool=false,fString=\ufffd,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "unknownFieldEqualityIsSymmetric[js, node]",
+        "failure": "AssertionError: Expected <true>, actual <false>."
+      },
+      {
+        "name": "repeatedBytesEqualObjectsHaveEqualHashes[js, node]",
+        "failure": "AssertionError: Expected <-221652541>, actual <654664787>."
+      },
+      {
+        "name": "oneofBytesUseValueEquality[js, node]",
+        "failure": "AssertionError: Expected <BytesMessage(choice=payload(value=[...]),chunks=[ }])>, actual <BytesMessage(choice=payload(value=[...]),chunks=[ }])>."
+      },
+      {
+        "name": "signedZeroEqualObjectsHaveEqualHashes[js, node]",
+        "failure": null
+      },
+      {
+        "name": "enumEqualsUnrelatedObjectIsFalse[js, node]",
+        "failure": "ClassCastException:"
+      },
+      {
+        "name": "inputStreamCanBeRefilledAfterRead[js, node]",
+        "failure": "AssertionError: Expected <2>, actual <1>."
+      },
+      {
+        "name": "byteBufferResetRewindsView[js, node]",
+        "failure": "AssertionError: Expected <2>, actual <0>."
+      },
+      {
+        "name": "byteBufferCopyRespectsDestinationOffset[js, node]",
+        "failure": "IndexOutOfBoundsException: fromIndex: 1, toIndex: 3, size: 2"
+      }
+    ]
+  },
+  {
+    "module": "conformance",
+    "target": "jvmTest",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialFlowTests",
+    "tests": 6,
+    "failures": 6,
+    "cases": [
+      {
+        "name": "gatewayPathRetainsAdditionalParameters[jvm]",
+        "failure": "java.lang.AssertionError: Expected value to be true."
+      },
+      {
+        "name": "finiteBidiRequestMustDrainAllResponses[jvm]",
+        "failure": "java.lang.AssertionError: expected:<[1, 2, 3]> but was:<[1]>"
+      },
+      {
+        "name": "queryParameterValuesAreEscaped[jvm]",
+        "failure": "org.junit.ComparisonFailure: expected:<...st/api/p.s/m?token=a[%26admin%3Dtrue%23]fragment> but was:<...st/api/p.s/m?token=a[&admin=true#]fragment>"
+      },
+      {
+        "name": "streamingOpenInterceptorMustRun[jvm]",
+        "failure": "java.lang.AssertionError: Expected value to be true."
+      },
+      {
+        "name": "bidiMustPropagateReceiveErrors[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception of class com.latenighthack.ktbuf.net.RpcResponseException to be thrown, but was completed successfully with the result: <[]>."
+      },
+      {
+        "name": "localStreamHonorsCloseEvent[jvm]",
+        "failure": "java.lang.AssertionError: expected:<[]> but was:<[AllTypes(fInt32=7,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)]>"
+      }
+    ]
+  },
+  {
+    "module": "conformance",
+    "target": "jvmTest",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialWireTests",
+    "tests": 25,
+    "failures": 25,
+    "cases": [
+      {
+        "name": "inputStreamCanBeRefilledAfterRead[jvm]",
+        "failure": "java.lang.AssertionError: expected:<2> but was:<1>"
+      },
+      {
+        "name": "rejectTruncatedBytes[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=AQAAAA,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "duplicateMessagesMerge[jvm]",
+        "failure": "java.lang.AssertionError: expected:<Inner(str=a,anInt=7,innerInner=(null))> but was:<Inner(str=,anInt=7,innerInner=(null))>"
+      },
+      {
+        "name": "byteBufferResetRewindsView[jvm]",
+        "failure": "java.lang.AssertionError: expected:<2> but was:<0>"
+      },
+      {
+        "name": "rejectTruncatedFixed32[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=1,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "repeatedBytesEqualObjectsHaveEqualHashes[jvm]",
+        "failure": "java.lang.AssertionError: expected:<-1162949164> but was:<-2026398275>"
+      },
+      {
+        "name": "unknownFieldEqualityIsSymmetric[jvm]",
+        "failure": "java.lang.AssertionError: expected:<true> but was:<false>"
+      },
+      {
+        "name": "negativeZeroSurvives[jvm]",
+        "failure": "java.lang.AssertionError: expected:<-2147483648> but was:<0>"
+      },
+      {
+        "name": "rejectUnterminatedVarint[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=16384,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "byteBufferCopyRespectsDestinationOffset[jvm]",
+        "failure": "java.lang.ArrayIndexOutOfBoundsException: arraycopy: last destination index 3 out of bounds for byte[2]"
+      },
+      {
+        "name": "rejectElevenByteVarint[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "signedZeroEqualObjectsHaveEqualHashes[jvm]",
+        "failure": "java.lang.AssertionError: expected:<-825272501> but was:<1322211147>"
+      },
+      {
+        "name": "rejectFieldZero[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0,unknown=AAA)>."
+      },
+      {
+        "name": "enumEqualsUnrelatedObjectIsFalse[jvm]",
+        "failure": "java.lang.ClassCastException: class java.lang.String cannot be cast to class com.latenighthack.ktbuf.proto.Enum (java.lang.String is in module java.base of loader 'bootstrap'; com.latenighthack.ktbuf.proto.Enum is in unnamed module of loader 'app')"
+      },
+      {
+        "name": "sameOneofMessageMerges[jvm]",
+        "failure": "java.lang.AssertionError: expected:<Inner(str=a,anInt=7,innerInner=(null))> but was:<Inner(str=,anInt=7,innerInner=(null))>"
+      },
+      {
+        "name": "oneofBytesUseValueEquality[jvm]",
+        "failure": "java.lang.AssertionError: expected: review.v1.BytesMessage<BytesMessage(choice=payload(value=[1]),chunks=[ }])> but was: review.v1.BytesMessage<BytesMessage(choice=payload(value=[1]),chunks=[ }])>"
+      },
+      {
+        "name": "wrongWireTypeMustNotSetKnownField[jvm]",
+        "failure": "java.lang.AssertionError: expected:<0> but was:<1>"
+      },
+      {
+        "name": "nonzeroBooleanIsTrue[jvm]",
+        "failure": "java.lang.AssertionError: Expected value to be true."
+      },
+      {
+        "name": "rejectInvalidUtf8[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=\ufffd,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "unknownGroupMustNotSetTopLevelField[jvm]",
+        "failure": "java.lang.AssertionError: expected:<0> but was:<99>"
+      },
+      {
+        "name": "rejectInvalidWireType[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "nestedReadsStayInsideDeclaredLength[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=7,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=Inner(str=????,anInt=0,innerInner=(null)),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectWrappedLength[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "unpackedNumericsAreAccepted[jvm]",
+        "failure": "java.lang.AssertionError: expected:<[1, 2]> but was:<[18448]>"
+      },
+      {
+        "name": "rejectMissingVarint[jvm]",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      }
+    ]
+  },
+  {
+    "module": "conformance",
+    "target": "testDebugUnitTest",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialFlowTests",
+    "tests": 3,
+    "failures": 3,
+    "cases": [
+      {
+        "name": "finiteBidiRequestMustDrainAllResponses",
+        "failure": "java.lang.AssertionError: expected:<[1, 2, 3]> but was:<[1]>"
+      },
+      {
+        "name": "streamingOpenInterceptorMustRun",
+        "failure": "java.lang.AssertionError: Expected value to be true."
+      },
+      {
+        "name": "bidiMustPropagateReceiveErrors",
+        "failure": "java.lang.AssertionError: Expected an exception of class com.latenighthack.ktbuf.net.RpcResponseException to be thrown, but was completed successfully with the result: <[]>."
+      }
+    ]
+  },
+  {
+    "module": "conformance",
+    "target": "testDebugUnitTest",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialWireTests",
+    "tests": 25,
+    "failures": 25,
+    "cases": [
+      {
+        "name": "inputStreamCanBeRefilledAfterRead",
+        "failure": "java.lang.AssertionError: expected:<2> but was:<1>"
+      },
+      {
+        "name": "rejectTruncatedBytes",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=AQAAAA,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "duplicateMessagesMerge",
+        "failure": "java.lang.AssertionError: expected:<Inner(str=a,anInt=7,innerInner=(null))> but was:<Inner(str=,anInt=7,innerInner=(null))>"
+      },
+      {
+        "name": "byteBufferResetRewindsView",
+        "failure": "java.lang.AssertionError: expected:<2> but was:<0>"
+      },
+      {
+        "name": "rejectTruncatedFixed32",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=1,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "repeatedBytesEqualObjectsHaveEqualHashes",
+        "failure": "java.lang.AssertionError: expected:<-1509217102> but was:<1657168201>"
+      },
+      {
+        "name": "unknownFieldEqualityIsSymmetric",
+        "failure": "java.lang.AssertionError: expected:<true> but was:<false>"
+      },
+      {
+        "name": "negativeZeroSurvives",
+        "failure": "java.lang.AssertionError: expected:<-2147483648> but was:<0>"
+      },
+      {
+        "name": "rejectUnterminatedVarint",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=16384,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "byteBufferCopyRespectsDestinationOffset",
+        "failure": "java.lang.ArrayIndexOutOfBoundsException: arraycopy: last destination index 3 out of bounds for byte[2]"
+      },
+      {
+        "name": "rejectElevenByteVarint",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "signedZeroEqualObjectsHaveEqualHashes",
+        "failure": "java.lang.AssertionError: expected:<-825272501> but was:<1322211147>"
+      },
+      {
+        "name": "rejectFieldZero",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0,unknown=AAA)>."
+      },
+      {
+        "name": "enumEqualsUnrelatedObjectIsFalse",
+        "failure": "java.lang.ClassCastException: class java.lang.String cannot be cast to class com.latenighthack.ktbuf.proto.Enum (java.lang.String is in module java.base of loader 'bootstrap'; com.latenighthack.ktbuf.proto.Enum is in unnamed module of loader 'app')"
+      },
+      {
+        "name": "sameOneofMessageMerges",
+        "failure": "java.lang.AssertionError: expected:<Inner(str=a,anInt=7,innerInner=(null))> but was:<Inner(str=,anInt=7,innerInner=(null))>"
+      },
+      {
+        "name": "oneofBytesUseValueEquality",
+        "failure": "java.lang.AssertionError: expected: review.v1.BytesMessage<BytesMessage(choice=payload(value=[1]),chunks=[ }])> but was: review.v1.BytesMessage<BytesMessage(choice=payload(value=[1]),chunks=[ }])>"
+      },
+      {
+        "name": "wrongWireTypeMustNotSetKnownField",
+        "failure": "java.lang.AssertionError: expected:<0> but was:<1>"
+      },
+      {
+        "name": "nonzeroBooleanIsTrue",
+        "failure": "java.lang.AssertionError: Expected value to be true."
+      },
+      {
+        "name": "rejectInvalidUtf8",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=\ufffd,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "unknownGroupMustNotSetTopLevelField",
+        "failure": "java.lang.AssertionError: expected:<0> but was:<99>"
+      },
+      {
+        "name": "rejectInvalidWireType",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "nestedReadsStayInsideDeclaredLength",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=7,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=Inner(str=????,anInt=0,innerInner=(null)),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectWrappedLength",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "unpackedNumericsAreAccepted",
+        "failure": "java.lang.AssertionError: expected:<[1, 2]> but was:<[18448]>"
+      },
+      {
+        "name": "rejectMissingVarint",
+        "failure": "java.lang.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      }
+    ]
+  },
+  {
+    "module": "conformance",
+    "target": "macosArm64Test",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialFlowTests",
+    "tests": 3,
+    "failures": 3,
+    "cases": [
+      {
+        "name": "finiteBidiRequestMustDrainAllResponses[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <[1, 2, 3]>, actual <[1]>."
+      },
+      {
+        "name": "bidiMustPropagateReceiveErrors[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception of com.latenighthack.ktbuf.net.RpcResponseException to be thrown, but was completed successfully with the result: <[]>.."
+      },
+      {
+        "name": "streamingOpenInterceptorMustRun[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected value to be true."
+      }
+    ]
+  },
+  {
+    "module": "conformance",
+    "target": "macosArm64Test",
+    "suite": "com.latenighthack.ktbuf.conformance.AdversarialWireTests",
+    "tests": 25,
+    "failures": 25,
+    "cases": [
+      {
+        "name": "rejectMissingVarint[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectUnterminatedVarint[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=16384,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectElevenByteVarint[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectTruncatedFixed32[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=1,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectTruncatedBytes[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=AQAAAA,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectWrappedLength[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "rejectFieldZero[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0,unknown=AAA)>."
+      },
+      {
+        "name": "rejectInvalidWireType[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "wrongWireTypeMustNotSetKnownField[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <0>, actual <1>."
+      },
+      {
+        "name": "unknownGroupMustNotSetTopLevelField[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <0>, actual <99>."
+      },
+      {
+        "name": "nestedReadsStayInsideDeclaredLength[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=7,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=Inner(str=????,anInt=0,innerInner=(null)),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "nonzeroBooleanIsTrue[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected value to be true."
+      },
+      {
+        "name": "unpackedNumericsAreAccepted[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <[1, 2]>, actual <[18448]>."
+      },
+      {
+        "name": "duplicateMessagesMerge[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <Inner(str=a,anInt=7,innerInner=(null))>, actual <Inner(str=,anInt=7,innerInner=(null))>."
+      },
+      {
+        "name": "sameOneofMessageMerges[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <Inner(str=a,anInt=7,innerInner=(null))>, actual <Inner(str=,anInt=7,innerInner=(null))>."
+      },
+      {
+        "name": "negativeZeroSurvives[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <-2147483648>, actual <0>."
+      },
+      {
+        "name": "rejectInvalidUtf8[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected an exception to be thrown, but was completed successfully with the result: <AllTypes(fInt32=0,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=\ufffd,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)>."
+      },
+      {
+        "name": "unknownFieldEqualityIsSymmetric[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <true>, actual <false>."
+      },
+      {
+        "name": "repeatedBytesEqualObjectsHaveEqualHashes[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <-1170106695>, actual <-1170101735>."
+      },
+      {
+        "name": "oneofBytesUseValueEquality[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <BytesMessage(choice=payload(value=[1]),chunks=[ }])>, actual <BytesMessage(choice=payload(value=[1]),chunks=[ }])>."
+      },
+      {
+        "name": "signedZeroEqualObjectsHaveEqualHashes[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <-825272501>, actual <1322211147>."
+      },
+      {
+        "name": "enumEqualsUnrelatedObjectIsFalse[macosArm64]",
+        "failure": "kotlin.ClassCastException: class kotlin.String cannot be cast to class com.latenighthack.ktbuf.proto.Enum"
+      },
+      {
+        "name": "inputStreamCanBeRefilledAfterRead[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <2>, actual <1>."
+      },
+      {
+        "name": "byteBufferResetRewindsView[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <2>, actual <0>."
+      },
+      {
+        "name": "byteBufferCopyRespectsDestinationOffset[macosArm64]",
+        "failure": "kotlin.ArrayIndexOutOfBoundsException"
+      }
+    ]
+  },
+  {
+    "module": "patch",
+    "target": "jvmTest",
+    "suite": "com.latenighthack.ktbuf.patch.AdversarialPatchTests",
+    "tests": 9,
+    "failures": 9,
+    "cases": [
+      {
+        "name": "indexedDistinctRemoveOnlyTouchesSelectedContainer[jvm]",
+        "failure": "java.lang.AssertionError: Array sizes differ. Expected size is 8, actual size is 4.\nExpected <[82, 4, 18, 2, 8, 1, 82, 0]>, actual <[82, 0, 82, 0]>."
+      },
+      {
+        "name": "addDistinctDoesNotSilentlyDoNothing[jvm]",
+        "failure": "java.lang.AssertionError: expected:<[1, 2]> but was:<[1]>"
+      },
+      {
+        "name": "requirePreservesExistingMessage[jvm]",
+        "failure": "java.lang.AssertionError: expected:<RootMessage(inner=InnerMessage(str=kept,anInt=7,innerInner=(null)),repeatMe=[ }],anInt=0,str=,type=UNKNOWN)> but was:<RootMessage(inner=InnerMessage(str=,anInt=0,innerInner=(null)),repeatMe=[ }],anInt=0,str=,type=UNKNOWN)>"
+      },
+      {
+        "name": "nestedEditPreservesSiblingFields[jvm]",
+        "failure": "org.junit.ComparisonFailure: expected:<[kept]> but was:<[]>"
+      },
+      {
+        "name": "addingNestedFieldPreservesUnrelatedRoot[jvm]",
+        "failure": "java.lang.ArrayIndexOutOfBoundsException: arraycopy: last source index 9 out of bounds for byte[8]"
+      },
+      {
+        "name": "requireCreatesMissingMessage[jvm]",
+        "failure": "java.lang.AssertionError: actual value is null"
+      },
+      {
+        "name": "insertEqualityAgainstUnrelatedObjectIsFalse[jvm]",
+        "failure": "java.lang.ClassCastException: class java.lang.String cannot be cast to class com.latenighthack.ktbuf.patch.Change$Insert (java.lang.String is in module java.base of loader 'bootstrap'; com.latenighthack.ktbuf.patch.Change$Insert is in unnamed module of loader 'app')"
+      },
+      {
+        "name": "listSetEmitsChange[jvm]",
+        "failure": "java.lang.AssertionError: expected:<1> but was:<0>"
+      },
+      {
+        "name": "invalidIndexDoesNotRecordChange[jvm]",
+        "failure": "java.lang.AssertionError: expected:<0> but was:<1>"
+      }
+    ]
+  },
+  {
+    "module": "patch",
+    "target": "macosArm64Test",
+    "suite": "com.latenighthack.ktbuf.patch.AdversarialPatchTests",
+    "tests": 9,
+    "failures": 9,
+    "cases": [
+      {
+        "name": "requirePreservesExistingMessage[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <RootMessage(inner=InnerMessage(str=kept,anInt=7,innerInner=(null)),repeatMe=[ }],anInt=0,str=,type=UNKNOWN)>, actual <RootMessage(inner=InnerMessage(str=,anInt=0,innerInner=(null)),repeatMe=[ }],anInt=0,str=,type=UNKNOWN)>."
+      },
+      {
+        "name": "requireCreatesMissingMessage[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected value to be not null."
+      },
+      {
+        "name": "nestedEditPreservesSiblingFields[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <kept>, actual <>."
+      },
+      {
+        "name": "addingNestedFieldPreservesUnrelatedRoot[macosArm64]",
+        "failure": "kotlin.ArrayIndexOutOfBoundsException"
+      },
+      {
+        "name": "indexedDistinctRemoveOnlyTouchesSelectedContainer[macosArm64]",
+        "failure": "kotlin.AssertionError: Array sizes differ. Expected size is 8, actual size is 4.\nExpected <[82, 4, 18, 2, 8, 1, 82, 0]>, actual <[82, 0, 82, 0]>."
+      },
+      {
+        "name": "listSetEmitsChange[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <1>, actual <0>."
+      },
+      {
+        "name": "addDistinctDoesNotSilentlyDoNothing[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <[1, 2]>, actual <[1]>."
+      },
+      {
+        "name": "invalidIndexDoesNotRecordChange[macosArm64]",
+        "failure": "kotlin.AssertionError: Expected <0>, actual <1>."
+      },
+      {
+        "name": "insertEqualityAgainstUnrelatedObjectIsFalse[macosArm64]",
+        "failure": "kotlin.ClassCastException: class kotlin.String cannot be cast to class com.latenighthack.ktbuf.patch.Change.Insert"
+      }
+    ]
+  },
+  {
+    "module": "server",
+    "target": "test",
+    "suite": "AdversarialServerTests",
+    "tests": 12,
+    "failures": 12,
+    "cases": [
+      {
+        "name": "truncatedHttpResponseFailsCallerRatherThanHanging",
+        "failure": "java.lang.AssertionError: expected IOException, got kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 1000 ms"
+      },
+      {
+        "name": "retryLimitOneStillRunsInitialAttempt",
+        "failure": "com.latenighthack.ktbuf.rpc.RetryLimitExceeded: [backoff] Retry limit exceeded"
+      },
+      {
+        "name": "ambiguousStatusCodesSurviveHttpTransport",
+        "failure": "java.lang.AssertionError: expected:<FAILED_PRECONDITION> but was:<INVALID_ARGUMENT>"
+      },
+      {
+        "name": "flowRetryLimitIsHonored",
+        "failure": "java.lang.AssertionError: expected:<1> but was:<6>"
+      },
+      {
+        "name": "unaryRunsAuthenticationContextProcessor",
+        "failure": "java.lang.AssertionError: auth must run; actual result=Success(AllTypes(fInt32=42,fInt64=0,fUint32=0,fUint64=0,fSint32=0,fSint64=0,fFixed32=0,fFixed64=0,fSfixed32=0,fSfixed64=0,fFloat=0.0,fDouble=0.0,fBool=false,fString=,fBytes=,fEnum=UNKNOWN,fInner=(null),rInt32=[ }],rString=[ }],rInner=[ }],fHighField=0)) expected:<1> but was:<0>"
+      },
+      {
+        "name": "cancellationIsNeverRetried",
+        "failure": "java.lang.AssertionError: expected:<1> but was:<4>"
+      },
+      {
+        "name": "typedStubDoesNotDiscardErrorOnlyResult",
+        "failure": "java.lang.AssertionError: actual value is null"
+      },
+      {
+        "name": "streamingFailureIsNotReportedAsSuccessfulEmptyStream",
+        "failure": "java.lang.AssertionError: Expected an exception of class com.latenighthack.ktbuf.net.RpcResponseException to be thrown, but was kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 3000 ms"
+      },
+      {
+        "name": "cancellingTransportClosesRemoteSocket",
+        "failure": "java.lang.AssertionError: cancelled call left socket open"
+      },
+      {
+        "name": "atomicUpdatesDoNotLoseConcurrentWrites",
+        "failure": "java.lang.AssertionError: expected:<8> but was:<1>"
+      },
+      {
+        "name": "normalServerStreamCompletesAtRemoteEnd",
+        "failure": "kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 1500 ms"
+      },
+      {
+        "name": "backoffHonorsTotalTimeLimit",
+        "failure": "java.lang.AssertionError: timeLimit=5ms exceeded 100ms"
+      }
+    ]
+  }
+]

@@ -1,0 +1,384 @@
+{
+  "queries": {
+    "queries": [
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "com.squareup.okhttp3:okhttp"
+        },
+        "version": "4.9.1"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "com.squareup.okio:okio"
+        },
+        "version": "2.8.0"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "com.typesafe:config"
+        },
+        "version": "1.4.3"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-events"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-events-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-http"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-http-cio"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-http-cio-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-http-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-io"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-io-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-network"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-network-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-serialization"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-serialization-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-cio"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-cio-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-core"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-core-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-cors"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-cors-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-websockets"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-server-websockets-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-utils"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-utils-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-websocket-serialization"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-websocket-serialization-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-websockets"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "io.ktor:ktor-websockets-jvm"
+        },
+        "version": "3.0.2"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.fusesource.jansi:jansi"
+        },
+        "version": "2.4.1"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlin:kotlin-reflect"
+        },
+        "version": "2.0.21"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib"
+        },
+        "version": "2.3.10"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlin:kotlin-stdlib-common"
+        },
+        "version": "2.3.10"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-coroutines-bom"
+        },
+        "version": "1.9.0"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+        },
+        "version": "1.9.0"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm"
+        },
+        "version": "1.9.0"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-io-bytestring"
+        },
+        "version": "0.5.4"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-io-bytestring-jvm"
+        },
+        "version": "0.5.4"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-io-core"
+        },
+        "version": "0.5.4"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-io-core-jvm"
+        },
+        "version": "0.5.4"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-serialization-bom"
+        },
+        "version": "1.7.3"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-serialization-core"
+        },
+        "version": "1.7.3"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm"
+        },
+        "version": "1.7.3"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.jetbrains:annotations"
+        },
+        "version": "23.0.0"
+      },
+      {
+        "package": {
+          "ecosystem": "Maven",
+          "name": "org.slf4j:slf4j-api"
+        },
+        "version": "2.0.16"
+      }
+    ]
+  },
+  "result": {
+    "results": [
+      {
+        "vulns": [
+          {
+            "id": "GHSA-3cqm-mf7h-prrj",
+            "modified": "2026-09-10T03:49:29.393060Z"
+          }
+        ]
+      },
+      {
+        "vulns": [
+          {
+            "id": "GHSA-w33c-445m-f8w7",
+            "modified": "2026-09-10T03:49:54.860062Z"
+          }
+        ]
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ]
+  }
+}

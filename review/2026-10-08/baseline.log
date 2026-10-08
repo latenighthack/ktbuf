@@ -1,0 +1,272 @@
+
+> Configure project :conformance
+w: [33m[1m⚠️ Deprecated Gradle Property 'kotlin.js.compiler' Used[0m[0m
+The `kotlin.js.compiler` deprecated property is used in your build.
+[32m[1mSolution:[0m[0m
+[32m[3mIt is unsupported, please stop using it.[0m[0m
+
+Configuration 'jsNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'jsTestNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'jsNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'jsTestNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'jsNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'jsTestNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'jsNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'jsTestNpmAggregated' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+
+> Task :library:kmpPartiallyResolvedDependenciesChecker
+> Task :library:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :library:compileKotlinJvm UP-TO-DATE
+> Task :library:compileJvmMainJava NO-SOURCE
+> Task :library:jvmProcessResources NO-SOURCE
+> Task :library:processJvmMainResources SKIPPED
+> Task :library:jvmMainClasses UP-TO-DATE
+> Task :library:jvmJar UP-TO-DATE
+> Task :library:compileTestKotlinJvm UP-TO-DATE
+> Task :library:compileJvmTestJava NO-SOURCE
+> Task :library:jvmTestProcessResources NO-SOURCE
+> Task :library:processJvmTestResources SKIPPED
+> Task :library:jvmTestClasses UP-TO-DATE
+> Task :library:jvmTest
+> Task :conformance:kmpPartiallyResolvedDependenciesChecker
+> Task :conformance:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :conformance:generateProtoKotlin UP-TO-DATE
+> Task :conformance:compileKotlinJvm UP-TO-DATE
+> Task :conformance:compileJvmMainJava NO-SOURCE
+> Task :conformance:jvmProcessResources NO-SOURCE
+> Task :conformance:processJvmMainResources SKIPPED
+> Task :conformance:jvmMainClasses UP-TO-DATE
+> Task :conformance:jvmJar UP-TO-DATE
+> Task :conformance:compileTestKotlinJvm UP-TO-DATE
+> Task :conformance:compileJvmTestJava NO-SOURCE
+> Task :conformance:jvmTestProcessResources NO-SOURCE
+> Task :conformance:processJvmTestResources SKIPPED
+> Task :conformance:jvmTestClasses UP-TO-DATE
+> Task :conformance:jvmTest
+> Task :patch:kmpPartiallyResolvedDependenciesChecker
+> Task :patch:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :patch:compileKotlinJvm UP-TO-DATE
+> Task :patch:compileJvmMainJava NO-SOURCE
+> Task :patch:generateProtoKotlin UP-TO-DATE
+> Task :patch:jvmProcessResources NO-SOURCE
+> Task :patch:processJvmMainResources SKIPPED
+> Task :patch:jvmMainClasses UP-TO-DATE
+> Task :patch:jvmJar UP-TO-DATE
+> Task :patch:compileTestKotlinJvm UP-TO-DATE
+> Task :patch:compileJvmTestJava NO-SOURCE
+> Task :patch:jvmTestProcessResources NO-SOURCE
+> Task :patch:processJvmTestResources SKIPPED
+> Task :patch:jvmTestClasses UP-TO-DATE
+> Task :patch:jvmTest
+> Task :server:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :server:compileKotlin UP-TO-DATE
+> Task :server:compileJava NO-SOURCE
+> Task :server:processResources NO-SOURCE
+> Task :server:classes UP-TO-DATE
+> Task :server:jar UP-TO-DATE
+> Task :rpc:kmpPartiallyResolvedDependenciesChecker
+> Task :rpc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :rpc:compileKotlinJvm UP-TO-DATE
+> Task :rpc:compileJvmMainJava NO-SOURCE
+> Task :rpc:jvmProcessResources NO-SOURCE
+> Task :rpc:processJvmMainResources SKIPPED
+> Task :rpc:jvmMainClasses UP-TO-DATE
+> Task :rpc:jvmJar UP-TO-DATE
+> Task :test:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :test:compileKotlin UP-TO-DATE
+> Task :test:compileJava NO-SOURCE
+> Task :server:compileTestKotlin UP-TO-DATE
+> Task :server:compileTestJava NO-SOURCE
+> Task :server:processTestResources NO-SOURCE
+> Task :server:testClasses UP-TO-DATE
+> Task :test:processResources NO-SOURCE
+> Task :test:classes UP-TO-DATE
+> Task :test:jar UP-TO-DATE
+> Task :server:test
+> Task :kotlinKotlinNpmCachesSetup
+> Task :kotlinNodeJsSetup UP-TO-DATE
+> Task :kotlinRestoreYarnLock UP-TO-DATE
+> Task :kotlinYarnSetup UP-TO-DATE
+> Task :library:jsPackageJson UP-TO-DATE
+> Task :conformance:jsPackageJson UP-TO-DATE
+> Task :conformance:jsTestPackageJson UP-TO-DATE
+> Task :library:jsTestPackageJson UP-TO-DATE
+> Task :patch:jsPackageJson UP-TO-DATE
+> Task :patch:jsTestPackageJson UP-TO-DATE
+> Task :rpc:jsPackageJson UP-TO-DATE
+> Task :rpc:jsTestPackageJson UP-TO-DATE
+> Task :conformance:jsPublicPackageJson UP-TO-DATE
+> Task :conformance:jsTestPublicPackageJson UP-TO-DATE
+> Task :library:jsPublicPackageJson UP-TO-DATE
+> Task :library:jsTestPublicPackageJson UP-TO-DATE
+> Task :patch:jsPublicPackageJson UP-TO-DATE
+> Task :patch:jsTestPublicPackageJson UP-TO-DATE
+> Task :rpc:jsPublicPackageJson UP-TO-DATE
+> Task :rpc:jsTestPublicPackageJson UP-TO-DATE
+> Task :kotlinPackageJsonUmbrella UP-TO-DATE
+> Task :rootPackageJson UP-TO-DATE
+> Task :kotlinNpmInstall UP-TO-DATE
+> Task :kotlinStoreYarnLock UP-TO-DATE
+> Task :library:compileKotlinJs UP-TO-DATE
+> Task :library:jsProcessResources NO-SOURCE
+> Task :library:jsMainClasses UP-TO-DATE
+> Task :library:compileTestKotlinJs UP-TO-DATE
+> Task :library:jsTestProcessResources NO-SOURCE
+> Task :library:jsTestClasses UP-TO-DATE
+> Task :library:compileTestDevelopmentExecutableKotlinJs UP-TO-DATE
+> Task :library:jsTestTestDevelopmentExecutableCompileSync UP-TO-DATE
+> Task :library:kotlinNodeJsSetup UP-TO-DATE
+> Task :library:jsNodeTest
+> Task :conformance:compileKotlinJs UP-TO-DATE
+> Task :conformance:jsProcessResources NO-SOURCE
+> Task :conformance:jsMainClasses UP-TO-DATE
+> Task :conformance:compileTestKotlinJs UP-TO-DATE
+> Task :conformance:jsTestProcessResources NO-SOURCE
+> Task :conformance:jsTestClasses UP-TO-DATE
+> Task :conformance:compileTestDevelopmentExecutableKotlinJs UP-TO-DATE
+> Task :conformance:jsTestTestDevelopmentExecutableCompileSync UP-TO-DATE
+> Task :conformance:kotlinNodeJsSetup UP-TO-DATE
+> Task :conformance:jsNodeTest
+> Task :library:preBuild UP-TO-DATE
+> Task :library:preDebugBuild UP-TO-DATE
+> Task :library:generateDebugResValues UP-TO-DATE
+> Task :library:generateDebugResources UP-TO-DATE
+> Task :library:packageDebugResources UP-TO-DATE
+> Task :library:parseDebugLocalResources UP-TO-DATE
+> Task :library:processDebugManifest UP-TO-DATE
+> Task :library:generateDebugRFile UP-TO-DATE
+> Task :library:compileDebugKotlinAndroid UP-TO-DATE
+> Task :library:javaPreCompileDebug UP-TO-DATE
+> Task :library:compileDebugJavaWithJavac NO-SOURCE
+> Task :library:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :library:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :library:preDebugUnitTestBuild UP-TO-DATE
+> Task :library:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :library:compileDebugUnitTestKotlinAndroid UP-TO-DATE
+> Task :library:javaPreCompileDebugUnitTest
+> Task :library:processDebugJavaRes UP-TO-DATE
+> Task :library:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :library:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :library:testDebugUnitTest
+> Task :conformance:preBuild UP-TO-DATE
+> Task :conformance:preDebugBuild UP-TO-DATE
+> Task :conformance:generateDebugResValues UP-TO-DATE
+> Task :conformance:generateDebugResources UP-TO-DATE
+> Task :conformance:packageDebugResources UP-TO-DATE
+> Task :conformance:parseDebugLocalResources UP-TO-DATE
+> Task :conformance:processDebugManifest UP-TO-DATE
+> Task :conformance:generateDebugRFile UP-TO-DATE
+> Task :conformance:compileDebugKotlinAndroid UP-TO-DATE
+> Task :conformance:javaPreCompileDebug UP-TO-DATE
+> Task :conformance:compileDebugJavaWithJavac NO-SOURCE
+> Task :conformance:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :conformance:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :conformance:preDebugUnitTestBuild UP-TO-DATE
+> Task :conformance:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :conformance:compileDebugUnitTestKotlinAndroid UP-TO-DATE
+> Task :conformance:javaPreCompileDebugUnitTest
+> Task :conformance:processDebugJavaRes UP-TO-DATE
+> Task :conformance:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :conformance:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :conformance:testDebugUnitTest
+> Task :library:preReleaseBuild UP-TO-DATE
+> Task :library:generateReleaseResValues UP-TO-DATE
+> Task :library:generateReleaseResources UP-TO-DATE
+> Task :library:packageReleaseResources UP-TO-DATE
+> Task :library:parseReleaseLocalResources UP-TO-DATE
+> Task :library:processReleaseManifest UP-TO-DATE
+> Task :library:generateReleaseRFile UP-TO-DATE
+> Task :library:compileReleaseKotlinAndroid UP-TO-DATE
+> Task :library:javaPreCompileRelease UP-TO-DATE
+> Task :library:compileReleaseJavaWithJavac NO-SOURCE
+> Task :library:bundleLibRuntimeToJarRelease UP-TO-DATE
+> Task :library:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :library:preReleaseUnitTestBuild UP-TO-DATE
+> Task :library:generateReleaseUnitTestStubRFile UP-TO-DATE
+> Task :library:compileReleaseUnitTestKotlinAndroid UP-TO-DATE
+> Task :library:javaPreCompileReleaseUnitTest
+> Task :library:processReleaseJavaRes UP-TO-DATE
+> Task :library:compileReleaseUnitTestJavaWithJavac NO-SOURCE
+> Task :library:processReleaseUnitTestJavaRes UP-TO-DATE
+> Task :library:testReleaseUnitTest
+> Task :conformance:preReleaseBuild UP-TO-DATE
+> Task :conformance:generateReleaseResValues UP-TO-DATE
+> Task :conformance:generateReleaseResources UP-TO-DATE
+> Task :conformance:packageReleaseResources UP-TO-DATE
+> Task :conformance:parseReleaseLocalResources UP-TO-DATE
+> Task :conformance:processReleaseManifest UP-TO-DATE
+> Task :conformance:generateReleaseRFile UP-TO-DATE
+> Task :conformance:compileReleaseKotlinAndroid UP-TO-DATE
+> Task :conformance:javaPreCompileRelease UP-TO-DATE
+> Task :conformance:compileReleaseJavaWithJavac NO-SOURCE
+> Task :conformance:bundleLibRuntimeToJarRelease UP-TO-DATE
+> Task :conformance:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :conformance:preReleaseUnitTestBuild UP-TO-DATE
+> Task :conformance:generateReleaseUnitTestStubRFile UP-TO-DATE
+> Task :conformance:compileReleaseUnitTestKotlinAndroid UP-TO-DATE
+> Task :conformance:javaPreCompileReleaseUnitTest
+> Task :conformance:processReleaseJavaRes UP-TO-DATE
+> Task :conformance:compileReleaseUnitTestJavaWithJavac NO-SOURCE
+> Task :conformance:processReleaseUnitTestJavaRes UP-TO-DATE
+> Task :conformance:testReleaseUnitTest
+> Task :library:downloadKotlinNativeDistribution UP-TO-DATE
+> Task :library:compileKotlinMacosArm64 UP-TO-DATE
+> Task :library:macosArm64ProcessResources NO-SOURCE
+> Task :library:macosArm64MainKlibrary UP-TO-DATE
+> Task :library:compileTestKotlinMacosArm64 UP-TO-DATE
+> Task :library:linkDebugTestMacosArm64 UP-TO-DATE
+> Task :library:macosArm64Test
+> Task :conformance:downloadKotlinNativeDistribution UP-TO-DATE
+> Task :conformance:compileKotlinMacosArm64 UP-TO-DATE
+> Task :conformance:macosArm64ProcessResources NO-SOURCE
+> Task :conformance:macosArm64MainKlibrary UP-TO-DATE
+> Task :conformance:compileTestKotlinMacosArm64 UP-TO-DATE
+> Task :conformance:linkDebugTestMacosArm64 UP-TO-DATE
+> Task :conformance:macosArm64Test
+> Task :rpc:downloadKotlinNativeDistribution UP-TO-DATE
+> Task :rpc:compileKotlinMacosArm64 UP-TO-DATE
+> Task :rpc:macosArm64ProcessResources NO-SOURCE
+> Task :rpc:macosArm64MainKlibrary UP-TO-DATE
+> Task :rpc:compileTestKotlinMacosArm64 UP-TO-DATE
+> Task :rpc:linkDebugTestMacosArm64 UP-TO-DATE
+> Task :rpc:macosArm64Test
+> Task :library:compileKotlinIosSimulatorArm64 UP-TO-DATE
+> Task :library:iosSimulatorArm64ProcessResources NO-SOURCE
+> Task :library:iosSimulatorArm64MainKlibrary UP-TO-DATE
+> Task :library:compileTestKotlinIosSimulatorArm64 UP-TO-DATE
+> Task :library:linkDebugTestIosSimulatorArm64 UP-TO-DATE
+> Task :library:iosSimulatorArm64Test
+> Task :conformance:compileKotlinIosSimulatorArm64 UP-TO-DATE
+> Task :conformance:iosSimulatorArm64ProcessResources NO-SOURCE
+> Task :conformance:iosSimulatorArm64MainKlibrary UP-TO-DATE
+> Task :conformance:compileTestKotlinIosSimulatorArm64 UP-TO-DATE
+> Task :conformance:linkDebugTestIosSimulatorArm64 UP-TO-DATE
+> Task :conformance:iosSimulatorArm64Test
+
+BUILD SUCCESSFUL in 8s
+144 actionable tasks: 24 executed, 120 up-to-date

@@ -1,0 +1,62 @@
+{
+  "missing_varint": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "unterminated_varint": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "eleven_byte_varint": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "truncated_fixed32": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "truncated_bytes": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "wrapped_length": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "field_zero": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "invalid_wire_type": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "wrong_wire_type": {
+    "accepted": true,
+    "message": ""
+  },
+  "unknown_group": {
+    "accepted": true,
+    "message": ""
+  },
+  "nested_scope": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "bool_two": {
+    "accepted": true,
+    "message": "f_bool: true\n"
+  },
+  "unpacked_numeric": {
+    "accepted": true,
+    "message": "r_int32: 1\nr_int32: 2\n"
+  },
+  "invalid_utf8": {
+    "accepted": false,
+    "error": "DecodeError"
+  },
+  "oversized_tag": {
+    "accepted": false,
+    "error": "DecodeError"
+  }
+}

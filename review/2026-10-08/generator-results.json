@@ -1,0 +1,159 @@
+[
+  {
+    "case": "basic",
+    "protoc": 0,
+    "files": 4,
+    "compile": 0,
+    "first_errors": []
+  },
+  {
+    "case": "scalar_map",
+    "protoc": 1,
+    "files": 0
+  },
+  {
+    "case": "message_map",
+    "protoc": 0,
+    "files": 4,
+    "compile": 0,
+    "first_errors": []
+  },
+  {
+    "case": "optional",
+    "protoc": 1,
+    "files": 0
+  },
+  {
+    "case": "proto2",
+    "protoc": 0,
+    "files": 4,
+    "compile": 0,
+    "first_errors": []
+  },
+  {
+    "case": "enum_only",
+    "protoc": 0,
+    "files": 0
+  },
+  {
+    "case": "service_only",
+    "protoc": 0,
+    "files": 4,
+    "compile": 0,
+    "first_errors": []
+  },
+  {
+    "case": "service_imports",
+    "protoc": 0,
+    "files": 10,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/service_imports/out/probe/case.server.kt:18:40: error: unresolved reference 'M'.",
+      "/tmp/ktbuf-generator-review/service_imports/out/probe/case.server.kt:18:43: error: unresolved reference 'M'."
+    ]
+  },
+  {
+    "case": "client_streaming",
+    "protoc": 0,
+    "files": 6,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/client_streaming/out/probe/case.service.kt:28:51: error: unresolved reference 'clientStreamServerUnary'.",
+      "/tmp/ktbuf-generator-review/client_streaming/out/probe/case.service.kt:28:126: error: cannot infer type for value parameter 'req'. Specify it explicitly."
+    ]
+  },
+  {
+    "case": "missing_java_package",
+    "protoc": 0,
+    "files": 4,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/missing_java_package/out/case.builder.kt:1:8: error: syntax error: Package name must be a '.'-separated identifier list placed on a single line.",
+      "/tmp/ktbuf-generator-review/missing_java_package/out/case.builder.kt:5:8: error: function 'M' must have a body."
+    ]
+  },
+  {
+    "case": "lowercase_nested",
+    "protoc": 0,
+    "files": 4,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/lowercase_nested/out/probe/case.builder.kt:18:26: error: unresolved reference 'MInner'.",
+      "/tmp/ktbuf-generator-review/lowercase_nested/out/probe/case.builder.kt:34:22: error: unresolved reference 'MInner'."
+    ]
+  },
+  {
+    "case": "shadow_writer",
+    "protoc": 0,
+    "files": 4,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/shadow_writer/out/probe/case.encoder.kt:16:9: error: operator '!=' cannot be applied to 'ProtobufWriter' and 'Int'.",
+      "/tmp/ktbuf-generator-review/shadow_writer/out/probe/case.encoder.kt:16:29: error: none of the following candidates is applicable:"
+    ]
+  },
+  {
+    "case": "shadow_reader",
+    "protoc": 0,
+    "files": 4,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/shadow_reader/out/probe/case.decoder.kt:18:20: error: 'val' cannot be reassigned.",
+      "/tmp/ktbuf-generator-review/shadow_reader/out/probe/case.decoder.kt:18:29: error: assignment type mismatch: actual type is 'Int', but 'ProtobufReader' was expected."
+    ]
+  },
+  {
+    "case": "unknown_fields_name",
+    "protoc": 0,
+    "files": 4,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/unknown_fields_name/out/probe/case.builder.kt:14:21: error: overload resolution ambiguity between candidates:",
+      "/tmp/ktbuf-generator-review/unknown_fields_name/out/probe/case.builder.kt:14:42: error: overload resolution ambiguity between candidates:"
+    ]
+  },
+  {
+    "case": "enum_lowercase",
+    "protoc": 0,
+    "files": 4,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/enum_lowercase/out/probe/case.builder.kt:18:38: error: unresolved reference 'zero'.",
+      "/tmp/ktbuf-generator-review/enum_lowercase/out/probe/case.data.kt:7:34: error: unresolved reference 'zero'."
+    ]
+  },
+  {
+    "case": "prefix_packages",
+    "protoc": 0,
+    "files": 8,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/prefix_packages/out/probe/case.builder.kt:41:86: error: argument type mismatch: actual type is 'Function1<VBuilder, Unit>', but 'Int' was expected.",
+      "/tmp/ktbuf-generator-review/prefix_packages/out/probe/case.decoder.kt:20:21: error: return type mismatch: expected 'V?', actual 'M'."
+    ]
+  },
+  {
+    "case": "cross_package_nested_repeated",
+    "protoc": 0,
+    "files": 8,
+    "compile": 1,
+    "first_errors": [
+      "/tmp/ktbuf-generator-review/cross_package_nested_repeated/out/probe/case.builder.kt:3:23: error: cannot import 'copy'. Functions and properties can only be imported from packages or objects.",
+      "/tmp/ktbuf-generator-review/cross_package_nested_repeated/out/probe/case.decoder.kt:3:23: error: unresolved reference 'readFrom'."
+    ]
+  },
+  {
+    "case": "keyword_oneof",
+    "protoc": 0,
+    "files": 4,
+    "compile": 0,
+    "first_errors": []
+  },
+  {
+    "case": "bytes_oneof",
+    "protoc": 0,
+    "files": 4,
+    "compile": 0,
+    "first_errors": []
+  }
+]

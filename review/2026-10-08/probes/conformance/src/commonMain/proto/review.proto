@@ -1,0 +1,5 @@
+syntax = "proto3";
+package review.v1;
+option java_package = "review.v1";
+message BytesMessage { repeated bytes chunks = 1; oneof choice { bytes payload = 2; } }
+message Recursive { Recursive child = 1; }

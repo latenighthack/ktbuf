@@ -1,0 +1,29 @@
+message_map populated_map_wire_bytes=0
+decoded_map={} unknown_size=9
+ 
+proto2 proto2_missing_required_accepted=M(id=0,count=0) expected_count_default=7
+encoded=0
+ 
+enum_only consumer_compile 1 
+ warning: classpath entry points to a non-existent location: /tmp/ktbuf-generator-review/enum_only/classes
+/tmp/ktbuf-generator-review/enum_only/Consumer.kt:1:8: error: unresolved reference 'probe'.
+import probe.*
+       ^^^^^
+/tmp/ktbuf-generator-review/enum_only/Consumer.kt:2:20: error: unresolved reference 'E'.
+fun main(){println(E.ZERO)}
+                   ^
+
+service_only consumer_compile 1 
+ /tmp/ktbuf-generator-review/service_only/Consumer.kt:2:23: error: unresolved reference 'SService'.
+fun main(){val client:SService?=null; println(client)}
+                      ^^^^^^^^
+
+recursion 0 deep_message_wire_bytes=2936
+parse_result=StackOverflowError
+ 
+quadratic 0 repeated_elements=2000 wire_bytes=2004 parse_ms=5 decoded=2000
+repeated_elements=10000 wire_bytes=10004 parse_ms=24 decoded=10000
+repeated_elements=40000 wire_bytes=40005 parse_ms=194 decoded=40000
+repeated_elements=80000 wire_bytes=80005 parse_ms=744 decoded=80000
+ 
+patch-hang TIMEOUT None

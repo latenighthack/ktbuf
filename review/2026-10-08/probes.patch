@@ -1,0 +1,327 @@
+diff --git a/conformance/src/commonMain/proto/review.proto b/conformance/src/commonMain/proto/review.proto
+new file mode 100644
+index 0000000..65a9527
+--- /dev/null
++++ b/conformance/src/commonMain/proto/review.proto
+@@ -0,0 +1,5 @@
++syntax = "proto3";
++package review.v1;
++option java_package = "review.v1";
++message BytesMessage { repeated bytes chunks = 1; oneof choice { bytes payload = 2; } }
++message Recursive { Recursive child = 1; }
+diff --git a/conformance/src/commonTest/kotlin/com/latenighthack/ktbuf/conformance/AdversarialWireTests.kt b/conformance/src/commonTest/kotlin/com/latenighthack/ktbuf/conformance/AdversarialWireTests.kt
+new file mode 100644
+index 0000000..5de7de2
+--- /dev/null
++++ b/conformance/src/commonTest/kotlin/com/latenighthack/ktbuf/conformance/AdversarialWireTests.kt
+@@ -0,0 +1,66 @@
++package com.latenighthack.ktbuf.conformance
++import com.latenighthack.ktbuf.*
++import com.latenighthack.ktbuf.bytes.*
++import com.latenighthack.ktbuf.conformance.v1.*
++import review.v1.BytesMessage
++import kotlin.test.*
++
++class AdversarialWireTests {
++    private fun hex(s: String) = s.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
++    private fun parse(s: String) = AllTypes.fromByteArray(hex(s))
++    @Test fun rejectMissingVarint() { assertFails { parse("08") } }
++    @Test fun rejectUnterminatedVarint() { assertFails { parse("0880") } }
++    @Test fun rejectElevenByteVarint() { assertFails { parse("08" + "80".repeat(10) + "00") } }
++    @Test fun rejectTruncatedFixed32() { assertFails { parse("3d01") } }
++    @Test fun rejectTruncatedBytes() { assertFails { parse("7a0401") } }
++    @Test fun rejectWrappedLength() { assertFails { parse("728080808010") } }
++    @Test fun rejectFieldZero() { assertFails { parse("0000") } }
++    @Test fun rejectInvalidWireType() { assertFails { parse("0e00") } }
++    @Test fun wrongWireTypeMustNotSetKnownField() { assertEquals(0, parse("0a0101").fInt32) }
++    @Test fun unknownGroupMustNotSetTopLevelField() { assertEquals(0, parse("a3060863a406").fInt32) }
++    @Test fun nestedReadsStayInsideDeclaredLength() { assertFails { parse("8a01020a040807") } }
++    @Test fun nonzeroBooleanIsTrue() { assertTrue(parse("6802").fBool) }
++    @Test fun unpackedNumericsAreAccepted() { assertEquals(listOf(1, 2), parse("900101900102").rInt32) }
++    @Test fun duplicateMessagesMerge() {
++        val bytes = AllTypes(fInner=AllTypes.Inner(str="a")).toByteArray() + AllTypes(fInner=AllTypes.Inner(anInt=7)).toByteArray()
++        assertEquals(AllTypes.Inner(str="a", anInt=7), AllTypes.fromByteArray(bytes).fInner)
++    }
++    @Test fun sameOneofMessageMerges() {
++        val bytes=OneOfHolder(choice=OneOfHolder.OneOfChoice.cInner(AllTypes.Inner(str="a"))).toByteArray()+OneOfHolder(choice=OneOfHolder.OneOfChoice.cInner(AllTypes.Inner(anInt=7))).toByteArray()
++        assertEquals(AllTypes.Inner(str="a",anInt=7),OneOfHolder.fromByteArray(bytes).choice?.getCInner())
++    }
++    @Test fun negativeZeroSurvives() {
++        assertEquals((-0.0f).toRawBits(), AllTypes.fromByteArray(AllTypes(fFloat=-0.0f).toByteArray()).fFloat.toRawBits())
++    }
++    @Test fun rejectInvalidUtf8() { assertFails { parse("7201ff") } }
++    @Test fun unknownFieldEqualityIsSymmetric() {
++        val a=AllTypes(); val b=AllTypes(unknownFields=hex("f82a7b"))
++        assertEquals(a.equals(b), b.equals(a))
++    }
++    @Test fun repeatedBytesEqualObjectsHaveEqualHashes() {
++        val a=BytesMessage(chunks=listOf(byteArrayOf(1))); val b=BytesMessage(chunks=listOf(byteArrayOf(1)))
++        assertEquals(a,b); assertEquals(a.hashCode(),b.hashCode())
++    }
++    @Test fun oneofBytesUseValueEquality() {
++        assertEquals(BytesMessage(choice=BytesMessage.OneOfChoice.payload(byteArrayOf(1))),BytesMessage(choice=BytesMessage.OneOfChoice.payload(byteArrayOf(1))))
++    }
++    @Test fun signedZeroEqualObjectsHaveEqualHashes() {
++        val a=AllTypes(fFloat=0.0f); val b=AllTypes(fFloat=-0.0f)
++        if(a.equals(b)) assertEquals(a.hashCode(), b.hashCode())
++    }
++    @Test fun enumEqualsUnrelatedObjectIsFalse() { val a: AllTypes.Kind = AllTypes.Kind.A; assertFalse(a.equals("A")) }
++    @Test fun inputStreamCanBeRefilledAfterRead() {
++        val s=ProtobufInputStream(); s.addBytes(hex("0801"))
++        assertEquals(1,s.read { AllTypes.readFrom(it) }.fInt32)
++        s.addBytes(hex("0802"))
++        assertEquals(2,s.read { AllTypes.readFrom(it) }.fInt32)
++    }
++    @Test fun byteBufferResetRewindsView() {
++        val b=MutableLinkedByteArray(); b.write(byteArrayOf(1,2)); val sub=b.subarray(0,2)
++        sub.readAdvance(1); sub.reset(); assertEquals(2,sub.size)
++    }
++    @Test fun byteBufferCopyRespectsDestinationOffset() {
++        val b=MutableLinkedByteArray(); b.write(byteArrayOf(1,2)); val out=ByteArray(2)
++        b.copyTo(out,destinationOffset=1); assertContentEquals(byteArrayOf(0,1),out)
++    }
++}
+diff --git a/conformance/src/commonTest/kotlin/com/latenighthack/ktbuf/conformance/AdversarialFlowTests.kt b/conformance/src/commonTest/kotlin/com/latenighthack/ktbuf/conformance/AdversarialFlowTests.kt
+new file mode 100644
+index 0000000..4a17375
+--- /dev/null
++++ b/conformance/src/commonTest/kotlin/com/latenighthack/ktbuf/conformance/AdversarialFlowTests.kt
+@@ -0,0 +1,58 @@
++package com.latenighthack.ktbuf.conformance
++import com.latenighthack.ktbuf.conformance.v1.*
++import com.latenighthack.ktbuf.net.*
++import com.latenighthack.ktbuf.proto.Codes
++import kotlinx.coroutines.*
++import kotlinx.coroutines.flow.*
++import kotlinx.coroutines.test.runTest
++import kotlin.test.*
++
++class AdversarialFlowTests {
++    @Test fun queryParameterValuesAreEscaped() {
++        val path=RpcMethodSpecifier("p","s","m",mapOf("token" to "a&admin=true#fragment")).toPath("https://example.test")
++        assertEquals("https://example.test/api/p.s/m?token=a%26admin%3Dtrue%23fragment",path)
++    }
++    @Test fun gatewayPathRetainsAdditionalParameters() {
++        assertTrue(RpcMethodSpecifier("p","s","m",mapOf("token" to "secret")).toApiGatewayPath("https://example.test").contains("token=secret"))
++    }
++    @Test fun localStreamHonorsCloseEvent() = runTest {
++        val server=object:ConformanceServer {
++            override suspend fun unary(context:GrpcRequestContext,request:AllTypes)=request
++            override fun serverStream(context:GrpcRequestContext,request:AllTypes):Flow<StreamControlEvent<AllTypes>> = flow {
++                emit(StreamControlEvent.Close()); emit(StreamControlEvent.Message(AllTypes(fInt32=7)))
++            }
++            override fun bidi(context:GrpcRequestContext,request:Flow<AllTypes>):Flow<StreamControlEvent<AllTypes>> = emptyFlow()
++        }
++        assertEquals(emptyList(),LocalConformanceServiceRpc(server).serverStream(AllTypes()).toList())
++    }
++    @Test fun finiteBidiRequestMustDrainAllResponses() = runTest {
++        val rpc=FakeRpcClient(echo={it})
++        assertEquals(listOf(1,2,3), ConformanceServiceRpc(rpc).bidi(flowOf(AllTypes(fInt32=1),AllTypes(fInt32=2),AllTypes(fInt32=3))).toList().map { it.fInt32 })
++    }
++    @Test fun bidiMustPropagateReceiveErrors() = runTest {
++        val rpc=object:RpcClient {
++            override suspend fun unaryCall(method:RpcMethodSpecifier,headers:Map<String,String>,request:ByteArray)=error("unused")
++            override suspend fun serverStreamingCall(method:RpcMethodSpecifier,block:suspend RpcServerStream.()->Unit,readyCallback:()->Unit) {
++                object:RpcServerStream {
++                    override suspend fun receive():ByteArray=throw RpcResponseException("","WS",Codes.PERMISSION_DENIED,"denied")
++                    override suspend fun send(bytes:ByteArray) {}
++                    override suspend fun closeOutbound() {}
++                    override suspend fun closeInbound() {}
++                }.block()
++            }
++        }
++        val requests=flow { emit(AllTypes()); delay(100); }
++        assertFailsWith<RpcResponseException> { ConformanceServiceRpc(rpc).bidi(requests).toList() }
++    }
++    @Test fun streamingOpenInterceptorMustRun() = runTest {
++        var opened=false
++        val interceptor=object:StreamingRpcInterceptor {
++            override suspend fun interceptOpen(method:RpcMethodSpecifier,headers:Map<String,String>,next:suspend (RpcMethodSpecifier,Map<String,String>)->Unit) { opened=true; next(method,headers) }
++            override suspend fun interceptSend(method:RpcMethodSpecifier,request:ByteArray,next:suspend (RpcMethodSpecifier,ByteArray)->Unit)=next(method,request)
++            override suspend fun interceptReceive(method:RpcMethodSpecifier,next:suspend (RpcMethodSpecifier)->ByteArray)=next(method)
++        }
++        val rpc=InterceptingRpcClient(FakeRpcClient(),listOf(interceptor))
++        rpc.serverStreamingCall(RpcMethodSpecifier("p","s","m"), {}, {})
++        assertTrue(opened)
++    }
++}
+diff --git a/patch/src/commonTest/kotlin/com/latenighthack/ktbuf/patch/AdversarialPatchTests.kt b/patch/src/commonTest/kotlin/com/latenighthack/ktbuf/patch/AdversarialPatchTests.kt
+new file mode 100644
+index 0000000..0211969
+--- /dev/null
++++ b/patch/src/commonTest/kotlin/com/latenighthack/ktbuf/patch/AdversarialPatchTests.kt
+@@ -0,0 +1,47 @@
++package com.latenighthack.ktbuf.patch
++import com.latenighthack.ktbuf.ProtobufOutputStream
++import com.latenighthack.ktbuf.patch.v1.*
++import kotlin.test.*
++
++class AdversarialPatchTests {
++    private fun path(vararg n:Int)=Path(n.map { Path.Component(it,0) })
++    @Test fun requirePreservesExistingMessage() {
++        val a=RootMessage(inner=RootMessage.InnerMessage(str="kept",anInt=7))
++        assertEquals(a,RootMessage.fromByteArray(a.toByteArray().applyChange(Change.Require(path(1)))))
++    }
++    @Test fun requireCreatesMissingMessage() {
++        assertNotNull(RootMessage.fromByteArray(byteArrayOf().applyChange(Change.Require(path(1)))).inner)
++    }
++    @Test fun nestedEditPreservesSiblingFields() {
++        val a=RootMessage(inner=RootMessage.InnerMessage(str="kept",anInt=7))
++        val b=RootMessage.fromByteArray(a.toByteArray().applyChanges(a.edit { inner { anInt=8 } }.changes))
++        assertEquals("kept",b.inner?.str); assertEquals(8,b.inner?.anInt)
++    }
++    @Test fun addingNestedFieldPreservesUnrelatedRoot() {
++        val a=RootMessage(anInt=12,str="kept")
++        val b=RootMessage.fromByteArray(a.toByteArray().applyChanges(a.edit { inner { anInt=8 } }.changes))
++        assertEquals(12,b.anInt); assertEquals("kept",b.str); assertEquals(8,b.inner?.anInt)
++    }
++    @Test fun indexedDistinctRemoveOnlyTouchesSelectedContainer() {
++        val p=RootMessage.RepeatedMessage(1).toByteArray()
++        val wire=ProtobufOutputStream.encode { encode(10) { encode(2) { encodeRaw(p) } }; encode(10) { encode(2) { encodeRaw(p) } } }
++        val change=Change.RemoveDistinct(Path(listOf(Path.Component(10,1),Path.Component(2,0))),p,null,null)
++        val expected=ProtobufOutputStream.encode { encode(10) { encode(2) { encodeRaw(p) } }; encode(10) {} }
++        assertContentEquals(expected,wire.applyChange(change))
++    }
++    @Test fun listSetEmitsChange() {
++        val c=EditContext(); val list=EditorList(c,2,{ byteArrayOf(this.toByte()) },listOf(1))
++        list[0]=2
++        assertEquals(1,c.changes.size)
++    }
++    @Test fun addDistinctDoesNotSilentlyDoNothing() {
++        val c=EditContext(); val list=EditorList(c,2,{ byteArrayOf(this.toByte()) },listOf(1))
++        list.addDistinct(2)
++        assertEquals(listOf(1,2),list.toList())
++    }
++    @Test fun invalidIndexDoesNotRecordChange() {
++        val c=EditContext(); val list=EditorList(c,2,{ byteArrayOf(this.toByte()) },listOf(1))
++        assertFails { list.removeAt(100) }; assertEquals(0,c.changes.size)
++    }
++    @Test fun insertEqualityAgainstUnrelatedObjectIsFalse() { assertFalse(Change.Insert(path(1),byteArrayOf()).equals("x")) }
++}
+diff --git a/server/src/test/kotlin/AdversarialServerTests.kt b/server/src/test/kotlin/AdversarialServerTests.kt
+new file mode 100644
+index 0000000..b2755af
+--- /dev/null
++++ b/server/src/test/kotlin/AdversarialServerTests.kt
+@@ -0,0 +1,121 @@
++import com.latenighthack.ktbuf.conformance.v1.*
++import com.latenighthack.ktbuf.net.*
++import com.latenighthack.ktbuf.proto.Codes
++import com.latenighthack.ktbuf.rpc.*
++import com.latenighthack.ktbuf.server.serveAll
++import com.latenighthack.ktbuf.test.server.TestServer
++import com.latenighthack.ktbuf.test.rpc.*
++import io.ktor.server.routing.routing
++import io.ktor.server.websocket.webSocket
++import io.ktor.websocket.*
++import kotlinx.coroutines.*
++import kotlinx.coroutines.flow.*
++import java.util.concurrent.atomic.AtomicInteger
++import java.net.ServerSocket
++import kotlin.concurrent.thread
++import kotlin.test.*
++
++class AdversarialServerTests {
++    @Test fun unaryRunsAuthenticationContextProcessor() = runBlocking<Unit> {
++        val checks=AtomicInteger()
++        val s=TestServer()
++        s.start { routing { serveAll(ConformanceTestServer(), ConformanceServer.Descriptor) {
++            checks.incrementAndGet()
++            throw RpcResponseException("","POST",Codes.UNAUTHENTICATED,"denied")
++        } } }
++        try {
++            val result=runCatching { withTimeout(3000) { ConformanceServiceRpc(HttpRpcClient(s.serverUrl)).unary(AllTypes(fInt32=21)) } }
++            assertEquals(1,checks.get(),"auth must run; actual result=$result")
++            assertTrue(result.exceptionOrNull() is RpcResponseException)
++        } finally { s.stop() }
++    }
++    @Test fun streamingFailureIsNotReportedAsSuccessfulEmptyStream() = runBlocking<Unit> {
++        val s=TestServer()
++        s.start { routing { serveAll(object:ConformanceServer by ConformanceTestServer() {
++            override fun serverStream(context:GrpcRequestContext,request:AllTypes):Flow<StreamControlEvent<AllTypes>> = flow {
++                throw RpcResponseException("","WS",Codes.PERMISSION_DENIED,"denied")
++            }
++        },ConformanceServer.Descriptor) } }
++        try {
++            assertFailsWith<RpcResponseException> { withTimeout(3000) { ConformanceServiceRpc(HttpRpcClient(s.serverUrl)).serverStream(AllTypes()).toList() } }
++        } finally { s.stop() }
++    }
++    @Test fun cancellingTransportClosesRemoteSocket() = runBlocking<Unit> {
++        val connected=CompletableDeferred<Unit>(); val closed=CompletableDeferred<Unit>(); val s=TestServer()
++        s.start { routing { webSocket("/api/p.S/M") {
++            connected.complete(Unit)
++            try { incoming.receive() } finally { closed.complete(Unit) }
++        } } }
++        try {
++            val job=launch(Dispatchers.Default) { HttpRpcClient(s.serverUrl).serverStreamingCall(RpcMethodSpecifier("p","S","M"), { receive() }, {}) }
++            withTimeout(3000) { connected.await() }
++            job.cancelAndJoin()
++            assertTrue(withTimeoutOrNull(700) { closed.await(); true } ?: false, "cancelled call left socket open")
++        } finally { s.stop() }
++    }
++    @Test fun truncatedHttpResponseFailsCallerRatherThanHanging() = runBlocking<Unit> {
++        val listener=ServerSocket(0)
++        val t=thread(isDaemon=true) {
++            listener.accept().use { socket ->
++                val input=socket.getInputStream(); var last4=""
++                while(!last4.endsWith("\r\n\r\n")) { val x=input.read(); if(x<0) break; last4=(last4+x.toChar()).takeLast(4) }
++                socket.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\nx".toByteArray())
++            }
++        }
++        try {
++            val error=runCatching { withTimeout(1000) { HttpRpcClient("127.0.0.1:${listener.localPort}").unaryCall(RpcMethodSpecifier("p","S","M"),emptyMap(),byteArrayOf()) } }.exceptionOrNull()
++            assertTrue(error is java.io.IOException,"expected IOException, got $error")
++        } finally { listener.close(); t.join(1000) }
++    }
++    @Test fun normalServerStreamCompletesAtRemoteEnd() = runBlocking<Unit> {
++        val s=TestServer()
++        s.start { routing { serveAll(ConformanceTestServer(frameCount=2),ConformanceServer.Descriptor) } }
++        try {
++            val frames=withTimeout(1500) { ConformanceServiceRpc(HttpRpcClient(s.serverUrl)).serverStream(AllTypes()).toList() }
++            assertEquals(2,frames.size)
++        } finally { s.stop() }
++    }
++    @Test fun ambiguousStatusCodesSurviveHttpTransport() = runBlocking<Unit> {
++        val s=TestServer(); s.start { routing { serveAll(ConformanceTestServer(),ConformanceServer.Descriptor) } }
++        try {
++            for(code in listOf(Codes.FAILED_PRECONDITION,Codes.OUT_OF_RANGE,Codes.ALREADY_EXISTS,Codes.INTERNAL,Codes.DATA_LOSS)) {
++                val e=runCatching { withTimeout(1500) { ConformanceServiceRpc(HttpRpcClient(s.serverUrl)).unary(AllTypes(fInt32=code.value,fBool=true)) } }.exceptionOrNull()
++                assertTrue(e is RpcResponseException); assertEquals(code,e.code)
++            }
++        } finally { s.stop() }
++    }
++    @Test fun atomicUpdatesDoNotLoseConcurrentWrites() {
++        val ref=AtomicReference(0)
++        val gate=java.util.concurrent.CyclicBarrier(8)
++        val threads=(1..8).map { thread { ref.getAndUpdate { gate.await(); this+1 } } }
++        threads.forEach { it.join() }
++        assertEquals(8,ref.value)
++    }
++    @Test fun retryLimitOneStillRunsInitialAttempt() = runBlocking<Unit> {
++        var calls=0
++        assertEquals(42,repeatWithBackoff(retryLimit=1) { calls++; 42 })
++        assertEquals(1,calls)
++    }
++    @Test fun cancellationIsNeverRetried() = runBlocking<Unit> {
++        var calls=0
++        runCatching { repeatWithBackoff<Int>(retryLimit=5,backoff=0,minRetryTime=0,maxRetryTime=0) { calls++; throw CancellationException("cancelled") } }
++        assertEquals(1,calls)
++    }
++    @Test fun flowRetryLimitIsHonored() = runBlocking<Unit> {
++        var calls=0
++        val source=flow<Int> { calls++; if(calls<6) throw IllegalStateException("failed"); emit(1) }
++        runCatching { source.retryWithBackoff(retryLimit=0) { null }.toList() }
++        assertEquals(1,calls)
++    }
++    @Test fun backoffHonorsTotalTimeLimit() = runBlocking<Unit> {
++        val start=System.nanoTime()
++        runCatching { repeatWithBackoff<Int>(retryLimit=6,timeLimit=5,backoff=10,minRetryTime=10,maxRetryTime=10) { delay(30); throw IllegalStateException("failed") } }
++        assertTrue((System.nanoTime()-start)/1_000_000<100,"timeLimit=5ms exceeded 100ms")
++    }
++    @Test fun typedStubDoesNotDiscardErrorOnlyResult() = runBlocking<Unit> {
++        val handler=object:TypedUnaryHandler<Int,Int>({1},{byteArrayOf(it.toByte())}) {
++            override suspend fun handleTypedRequest(method:RpcMethodSpecifier,headers:Map<String,String>,request:Int)=UnaryHandlerResponse<Int>(null,IllegalStateException("expected"))
++        }
++        assertNotNull(handler.handleRequest(RpcMethodSpecifier("p","s","m"),emptyMap(),byteArrayOf()))
++    }
++}
