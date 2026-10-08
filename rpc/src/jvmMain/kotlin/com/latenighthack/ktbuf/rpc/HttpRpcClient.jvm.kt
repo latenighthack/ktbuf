@@ -80,6 +80,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         val queuedBytes = java.util.concurrent.atomic.AtomicLong()
         val byteLimit = com.latenighthack.ktbuf.ProtobufLimits().maxMessageBytes.toLong()
         var outboundClosed = false
+        var halfCloseSupported = false
         val sending = kotlinx.coroutines.sync.Mutex()
         var socket: WebSocket? = null
         val wsUrl = rpcWebSocketBaseUrl(serverPath)
@@ -109,13 +110,23 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             }
             override suspend fun closeOutbound() {
                 sending.lock()
-                try { outboundClosed = true } finally { sending.unlock() }
+                try {
+                    if (!outboundClosed) {
+                        ready.await()
+                        if (!halfCloseSupported) throw error(Codes.UNIMPLEMENTED, "Peer does not support request half-close")
+                        if (!checkNotNull(socket).send(RPC_REQUESTS_END)) throw error(Codes.UNAVAILABLE, "WebSocket rejected request half-close")
+                        outboundClosed = true
+                    }
+                } finally { sending.unlock() }
             }
             override suspend fun closeInbound() { inbound.close() }
         }
         try {
-            socket = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
-                override fun onOpen(webSocket: WebSocket, response: Response) { ready.complete(Unit) }
+            socket = client.newWebSocket(Request.Builder().url(url).header("Sec-WebSocket-Protocol", RPC_STREAM_PROTOCOL).build(), object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    halfCloseSupported = response.header("Sec-WebSocket-Protocol") == RPC_STREAM_PROTOCOL
+                    ready.complete(Unit)
+                }
                 override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                     finish(code, reason)
                     webSocket.close(1000, null)

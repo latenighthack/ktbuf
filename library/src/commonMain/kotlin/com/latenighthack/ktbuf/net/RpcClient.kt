@@ -208,6 +208,10 @@ data class RpcMethodSpecifier(
 
 class RpcResponse(val data: ByteArray, val headers: Map<String, String>)
 
+/** Negotiated WebSocket protocol: binary protobuf requests, then one text half-close marker. */
+const val RPC_STREAM_PROTOCOL = "ktbuf.stream.v1"
+const val RPC_REQUESTS_END = "ktbuf.requests.end"
+
 interface RpcServerStream {
     @Throws(IllegalStateException::class, RpcResponseException::class)
     suspend fun receive(): ByteArray
@@ -215,6 +219,8 @@ interface RpcServerStream {
     @Throws(IllegalStateException::class)
     suspend fun send(bytes: ByteArray)
 
+    /** Completes requests while retaining responses until the peer sends successful EOF.
+     * A peer that did not negotiate half-close must fail explicitly rather than discard replies. */
     suspend fun closeOutbound()
 
     suspend fun closeInbound()

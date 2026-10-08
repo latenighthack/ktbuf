@@ -110,7 +110,7 @@ private class EchoStream(
         inbound.send(transform(bytes))
     }
 
-    override suspend fun closeOutbound() {}
+    override suspend fun closeOutbound() { inbound.close() }
 
     override suspend fun closeInbound() {
         inbound.close()

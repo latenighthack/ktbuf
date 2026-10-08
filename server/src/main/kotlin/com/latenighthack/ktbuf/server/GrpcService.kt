@@ -181,69 +181,44 @@ public fun <Server: Any> Routing.serveStreamingInOut(
     limits: ProtobufLimits,
     contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
 ) {
-    webSocket("/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}") {
-        maxFrameSize = limits.maxMessageBytes.toLong()
-        try {
-            val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
-            val handler = (methodDescriptor.handler as ServerMethod.ClientServerStreaming).handler
-
-        val requestFlow = channelFlow {
-            whileSelect {
-                incoming.onReceiveCatching {
-                    if (it.isSuccess) {
-                        val stream = ProtobufInputStream(limits = limits)
-                        val frame = it.getOrNull()!!
-
-                        stream.addBytes(frame.readBytes())
-
-                        val request = stream.read(methodDescriptor.requestParser)
-
-                        this@channelFlow.send(request)
-
-                        true
-                    } else {
-                        incoming.cancel()
-                        this@channelFlow.close()
-                        false
+    // Prefer the negotiated route while retaining legacy long-lived request streams.
+    for (protocol in listOf(RPC_STREAM_PROTOCOL, null)) {
+        webSocket("/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}", protocol) {
+            maxFrameSize = limits.maxMessageBytes.toLong()
+            try {
+                val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
+                val handler = (methodDescriptor.handler as ServerMethod.ClientServerStreaming).handler
+                val requests = kotlinx.coroutines.flow.flow {
+                    while (true) {
+                        val frame = incoming.receiveCatching().getOrNull() ?: break
+                        if (frame is Frame.Text) {
+                            if (protocol == RPC_STREAM_PROTOCOL && frame.readText() == RPC_REQUESTS_END) break
+                            throw RpcResponseException("", "WS", Codes.INVALID_ARGUMENT, "Unexpected RPC text frame")
+                        }
+                        if (frame !is Frame.Binary) throw RpcResponseException("", "WS", Codes.INVALID_ARGUMENT, "Expected binary RPC request")
+                        val input = ProtobufInputStream(limits = limits)
+                        input.addBytes(frame.readBytes())
+                        emit(input.read(methodDescriptor.requestParser))
                     }
                 }
-            }
-        }
-
-            handler(server, context, requestFlow)
-                .onCompletion {
-                    when (it) {
-                        null -> close(CloseReason(CloseReason.Codes.NORMAL, ""))
-                        is RpcResponseException -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, it.errorMessage))
-                        else -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
-                    }
-                }
-                .collect { event ->
-                    val outStream = ProtobufOutputStream()
-
+                handler(server, context, requests).collect { event ->
                     when (event) {
-                        is StreamControlEvent.Close<*> -> {
-                            close()
-                        }
+                        is StreamControlEvent.Close<*> -> close()
                         is StreamControlEvent.Message<*> -> {
-                            val outgoing = event.message
-
-                            outStream.write { writer ->
-                                methodDescriptor.responseSerializer.invoke(writer, outgoing)
-                            }
-
-                            val outgoingBytes = outStream.toByteArray()
-
-                            send(outgoingBytes)
+                            val output = ProtobufOutputStream()
+                            output.write { methodDescriptor.responseSerializer.invoke(it, event.message) }
+                            send(output.toByteArray())
                         }
                     }
                 }
-        } catch (limit: ProtobufLimitException) {
-            close(reason = CloseReason(4008.toShort(), "Request exceeds decoding limits"))
-        } catch (rpcException: RpcResponseException) {
-            close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))
-        } catch (t: Throwable) {
-            close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
+                close(CloseReason(CloseReason.Codes.NORMAL, ""))
+            } catch (limit: ProtobufLimitException) {
+                close(CloseReason(4008.toShort(), "Request exceeds decoding limits"))
+            } catch (rpcException: RpcResponseException) {
+                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))
+            } catch (t: Throwable) {
+                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
+            }
         }
     }
 }

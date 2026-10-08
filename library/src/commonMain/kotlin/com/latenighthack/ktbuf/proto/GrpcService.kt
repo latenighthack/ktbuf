@@ -75,14 +75,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
                     val reader = ScopedProtobufReader(readBytes)
                     readBytes.insert(responseBytes)
 
-                    val response = try {
-                        val resp = readResponse(reader)
-
-                        resp
-                    } catch (ex: Throwable) {
-                        this@channelFlow.cancel("failed to unmarshal response", ex)
-                        return@serverStreamingCall
-                    }
+                    val response = readResponse(reader)
 
                     this@channelFlow.send(response)
                 }
@@ -130,87 +123,51 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
         generateExtraParams: ((RequestType) -> Map<String, String>)? = null,
         readyCallback: () -> Unit = {}
     ): Flow<ResponseType> = channelFlow {
-        // Lossless, ordered request pipeline. The previous shareIn(replay = 1) dropped any
-        // request emitted between the first() peek and the transport's subscription — a client
-        // that follows its open with an immediate second request (pending acks) lost the open
-        // itself and could never establish the stream.
-        val firstRequest = CompletableDeferred<RequestType>()
-        val requests = Channel<RequestType>(Channel.UNLIMITED)
-
-        launch {
+        val firstRequest = CompletableDeferred<RequestType?>()
+        val requests = Channel<RequestType>(16)
+        val producer = launch {
             try {
                 request.collect { nextRequest ->
-                    if (!firstRequest.isCompleted) {
-                        firstRequest.complete(nextRequest)
-                    }
+                    if (!firstRequest.isCompleted) firstRequest.complete(nextRequest)
                     requests.send(nextRequest)
                 }
-                if (!firstRequest.isCompleted) {
-                    firstRequest.completeExceptionally(NoSuchElementException("request flow completed without emitting"))
-                }
-            } catch (cause: Throwable) {
-                if (!firstRequest.isCompleted) {
-                    firstRequest.completeExceptionally(cause)
-                }
-                throw cause
-            } finally {
+                if (!firstRequest.isCompleted) firstRequest.complete(null)
                 requests.close()
+            } catch (cause: Throwable) {
+                firstRequest.completeExceptionally(cause)
+                requests.close(cause)
+                throw cause
             }
         }
-
-        val first = firstRequest.await()
-
-        val extraParams = generateExtraParams?.invoke(first) ?: emptyMap()
-
-        rpc.serverStreamingCall(
-            RpcMethodSpecifier(packageName, serviceName, methodName, extraParams),
-            {
-                var keepGoing = true
-                val requestJob = launch {
-                    try {
-                        for (nextRequest in requests) {
-                            val requestBytes = ProtobufOutputStream()
-                                .also {
-                                    it.write {
-                                        nextRequest.writeRequest(it)
-                                    }
-                                }
-                                .toByteArray()
-
-                            send(requestBytes)
+        try {
+            val first = firstRequest.await()
+            val extraParams = if (first == null) emptyMap() else generateExtraParams?.invoke(first) ?: emptyMap()
+            rpc.serverStreamingCall(
+                RpcMethodSpecifier(packageName, serviceName, methodName, extraParams),
+                {
+                    coroutineScope {
+                        val sender = launch {
+                            for (nextRequest in requests) {
+                                val bytes = ProtobufOutputStream.encode { nextRequest.writeRequest(this) }
+                                send(bytes)
+                            }
+                            closeOutbound()
                         }
-                    } finally {
-                        // Request side exhausted (flow completed and queue drained) or cancelled.
-                        keepGoing = false
-                        closeInbound()
-                    }
-                }
-
-                try {
-                    while (keepGoing) {
-                        val bytes = receive()
-                        val readBytes = MutableLinkedByteArray()
-                        val reader = ScopedProtobufReader(readBytes)
-
-                        readBytes.insert(bytes)
-
-                        val response = try {
-                            val resp = readResponse(reader)
-
-                            resp
-                        } catch (ex: Throwable) {
-                            this@channelFlow.cancel("failed to unmarshal response", ex)
-                            return@serverStreamingCall
+                        try {
+                            while (true) {
+                                val bytes = try { receive() } catch (_: ClosedReceiveChannelException) { break }
+                                val reader = ScopedProtobufReader(com.latenighthack.ktbuf.bytes.mutableLinkedByteArrayOf(*bytes))
+                                this@channelFlow.send(readResponse(reader))
+                            }
+                        } finally {
+                            sender.cancelAndJoin()
                         }
-
-                        this@channelFlow.send(response)
                     }
-                } catch (ex: Throwable) {
-                } finally {
-                    requestJob.cancel()
-                    closeOutbound()
-                }
-            }, readyCallback
-        )
+                }, readyCallback
+            )
+        } finally {
+            producer.cancelAndJoin()
+            requests.cancel()
+        }
     }
 }
