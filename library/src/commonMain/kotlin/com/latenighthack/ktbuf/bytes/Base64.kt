@@ -3,60 +3,64 @@ package com.latenighthack.ktbuf.bytes
 private const val BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 private val BASE64_INVERSE_ALPHABET = IntArray(256) { BASE64_ALPHABET.indexOf(it.toChar()) }
 
-fun String.fromBase64String(): ByteArray = encodeToByteArray().decodeBase64()
+/** RFC 4648 Base64URL, without padding. Invalid characters and noncanonical pad bits fail. */
+fun String.fromBase64UrlString(): ByteArray = decodeBase64Url(length) { this[it].code }
 
-fun ByteArray.toBase64String(): String {
-    val output = mutableListOf<Char>()
-    var padding = 0
-    var position = 0
-    while (position < this.size) {
-        var b = this[position].toPositiveInt() shl 16 and 0xFFFFFF
-        if (position + 1 < this.size) b = b or (this[position + 1].toPositiveInt() shl 8) else padding++
-        if (position + 2 < this.size) b = b or (this[position + 2].toPositiveInt()) else padding++
-        for (i in 0 until 4 - padding) {
-            val c = b and 0xFC0000 shr 18
-            output.add(BASE64_ALPHABET[c])
-            b = b shl 6
-        }
-        position += 3
+/** RFC 4648 Base64URL, without padding. */
+fun ByteArray.toBase64UrlString(): String {
+    val count = (size.toLong() * 8 + 5) / 6
+    require(count <= Int.MAX_VALUE) { "Base64URL output exceeds the string size limit" }
+    val output = CharArray(count.toInt())
+    var source = 0
+    var target = 0
+    while (source < size) {
+        val remaining = size - source
+        val value = ((this[source].toInt() and 255) shl 16) or
+            (if (remaining > 1) (this[source + 1].toInt() and 255) shl 8 else 0) or
+            (if (remaining > 2) this[source + 2].toInt() and 255 else 0)
+        output[target++] = BASE64_ALPHABET[value ushr 18]
+        output[target++] = BASE64_ALPHABET[(value ushr 12) and 63]
+        if (remaining > 1) output[target++] = BASE64_ALPHABET[(value ushr 6) and 63]
+        if (remaining > 2) output[target++] = BASE64_ALPHABET[value and 63]
+        source += minOf(3, remaining)
     }
-
-    return output.toCharArray().concatToString()
+    return output.concatToString()
 }
 
-fun ByteArray.decodeBase64(): ByteArray {
-    val output = mutableListOf<Byte>()
-    var position = 0
-    while (position < this.size) {
-        var b: Int
-        if (BASE64_INVERSE_ALPHABET[this[position].toPositiveInt()] != -1) {
-            b = BASE64_INVERSE_ALPHABET[this[position].toPositiveInt()] and 0xFF shl 18
-        } else {
-            position++
-            continue
-        }
-        var count = 0
-        if (position + 1 < this.size && BASE64_INVERSE_ALPHABET[this[position + 1].toPositiveInt()] != -1) {
-            b = b or (BASE64_INVERSE_ALPHABET[this[position + 1].toPositiveInt()] and 0xFF shl 12)
-            count++
-        }
-        if (position + 2 < this.size && BASE64_INVERSE_ALPHABET[this[position + 2].toPositiveInt()] != -1) {
-            b = b or (BASE64_INVERSE_ALPHABET[this[position + 2].toPositiveInt()] and 0xFF shl 6)
-            count++
-        }
-        if (position + 3 < this.size && BASE64_INVERSE_ALPHABET[this[position + 3].toPositiveInt()] != -1) {
-            b = b or (BASE64_INVERSE_ALPHABET[this[position + 3].toPositiveInt()] and 0xFF)
-            count++
-        }
-        while (count > 0) {
-            val c = b and 0xFF0000 shr 16
-            output.add(c.toByte())
-            b = b shl 8
-            count--
-        }
-        position += 4
+/** Decodes ASCII Base64URL without padding, with the same validation as the String API. */
+fun ByteArray.decodeBase64Url(): ByteArray = decodeBase64Url(size) { this[it].toInt() and 255 }
+
+private inline fun decodeBase64Url(length: Int, character: (Int) -> Int): ByteArray {
+    require(length % 4 != 1) { "Invalid Base64URL length" }
+    for (index in 0 until length) {
+        val code = character(index)
+        require(code in 0..255 && BASE64_INVERSE_ALPHABET[code] >= 0) { "Invalid Base64URL character" }
     }
-    return output.toByteArray()
+    if (length % 4 != 0) {
+        val last = BASE64_INVERSE_ALPHABET[character(length - 1)]
+        val mask = if (length % 4 == 2) 15 else 3
+        require(last and mask == 0) { "Noncanonical Base64URL pad bits" }
+    }
+    val output = ByteArray((length / 4) * 3 + if (length % 4 == 0) 0 else length % 4 - 1)
+    var accumulator = 0
+    var bits = 0
+    var target = 0
+    for (index in 0 until length) {
+        accumulator = (accumulator shl 6) or BASE64_INVERSE_ALPHABET[character(index)]
+        bits += 6
+        if (bits >= 8) {
+            bits -= 8
+            output[target++] = (accumulator ushr bits).toByte()
+        }
+    }
+    return output
 }
 
-private fun Byte.toPositiveInt() = toInt() and 0xFF
+@Deprecated("This API uses Base64URL without padding; use fromBase64UrlString", ReplaceWith("fromBase64UrlString()"))
+fun String.fromBase64String(): ByteArray = fromBase64UrlString()
+
+@Deprecated("This API uses Base64URL without padding; use toBase64UrlString", ReplaceWith("toBase64UrlString()"))
+fun ByteArray.toBase64String(): String = toBase64UrlString()
+
+@Deprecated("This API uses Base64URL without padding; use decodeBase64Url", ReplaceWith("decodeBase64Url()"))
+fun ByteArray.decodeBase64(): ByteArray = decodeBase64Url()
