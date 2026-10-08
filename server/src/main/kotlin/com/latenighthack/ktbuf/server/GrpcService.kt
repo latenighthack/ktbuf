@@ -17,6 +17,9 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.selects.whileSelect
@@ -76,9 +79,7 @@ public fun <Server: Any> Routing.serveUnary(
     post(path) {
         try {
             val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
-            val stream = ProtobufInputStream(limits = limits)
-            stream.addBytes(call.readBoundedBody(limits.maxMessageBytes))
-            val request = stream.read(methodDescriptor.requestParser)
+            val request = decodeRequest(call.readBoundedBody(limits.maxMessageBytes), limits, methodDescriptor.requestParser)
             val handler = methodDescriptor.handler as ServerMethod.Unary
 
             val outgoing = handler.handler.invoke(server, context, request)
@@ -91,7 +92,10 @@ public fun <Server: Any> Routing.serveUnary(
             val outgoingBytes = outStream.toByteArray()
 
             call.respond(outgoingBytes)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (limit: ProtobufLimitException) {
+            call.response.headers.append(RPC_STATUS_HEADER, Codes.RESOURCE_EXHAUSTED.value.toString())
             call.respondText("Request exceeds decoding limits", status = HttpStatusCode.TooManyRequests)
         } catch (rpcException: RpcResponseException) {
             call.response.headers.append(RPC_STATUS_HEADER, rpcException.code.value.toString())
@@ -99,10 +103,10 @@ public fun <Server: Any> Routing.serveUnary(
                 rpcException.errorMessage,
                 status = HttpStatusCode(rpcException.code.toHttpCode(), rpcException.code.name)
             )
-        } catch (t: Throwable) {
-            println("gRPC unary error($path): $t")
-            t.printStackTrace()
-            call.respondText(t.toString(), status = HttpStatusCode.InternalServerError)
+        } catch (t: Exception) {
+            call.application.log.error("RPC handler failed ($path)", t)
+            call.response.headers.append(RPC_STATUS_HEADER, Codes.INTERNAL.value.toString())
+            call.respondText("Internal server error", status = HttpStatusCode.InternalServerError)
         }
     }
 }
@@ -125,18 +129,11 @@ public fun <Server: Any> Routing.serveStreamingOut(
         maxFrameSize = limits.maxMessageBytes.toLong()
         try {
             val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
-            val stream = ProtobufInputStream(limits = limits)
             val frame = incoming.receive()
-            stream.addBytes(frame.readBytes())
-            val request = stream.read(methodDescriptor.requestParser)
+            if (frame !is Frame.Binary) throw RpcResponseException("", "WS", Codes.INVALID_ARGUMENT, "Expected binary RPC request")
+            val request = decodeRequest(frame.readBytes(), limits, methodDescriptor.requestParser)
             (methodDescriptor.handler as ServerMethod.ServerStreaming).handler.invoke(server, context, request)
-                .onCompletion {
-                    when (it) {
-                        null -> close(CloseReason(CloseReason.Codes.NORMAL, ""))
-                        is RpcResponseException -> close(reason = CloseReason(it.code.toWSCode().toShort(), safeWSReason(it.errorMessage)))
-                        else -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
-                    }
-                }
+                .takeWhile { it !is StreamControlEvent.Close<*> }
                 .collect { event ->
                     val outStream = ProtobufOutputStream()
 
@@ -157,12 +154,16 @@ public fun <Server: Any> Routing.serveStreamingOut(
                         }
                     }
                 }
+            close(CloseReason(CloseReason.Codes.NORMAL, ""))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (limit: ProtobufLimitException) {
             close(reason = CloseReason(4008.toShort(), "Request exceeds decoding limits"))
         } catch (rpcException: RpcResponseException) {
             close(reason = CloseReason(rpcException.code.toWSCode().toShort(), safeWSReason(rpcException.errorMessage)))
-        } catch (t: Throwable) {
-            close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
+        } catch (t: Exception) {
+            call.application.log.error("RPC streaming handler failed (${call.request.path()})", t)
+            close(reason = CloseReason(Codes.INTERNAL.toWSCode().toShort(), "Internal server error"))
         }
     }
 }
@@ -190,15 +191,13 @@ public fun <Server: Any> Routing.serveStreamingInOut(
                 val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
                 val requests = kotlinx.coroutines.flow.flow {
                     while (true) {
-                        val frame = incoming.receiveCatching().getOrNull() ?: break
+                        val frame = try { incoming.receive() } catch (_: ClosedReceiveChannelException) { break }
                         if (frame is Frame.Text) {
                             if (protocol == RPC_STREAM_PROTOCOL && frame.readText() == RPC_REQUESTS_END) break
                             throw RpcResponseException("", "WS", Codes.INVALID_ARGUMENT, "Unexpected RPC text frame")
                         }
                         if (frame !is Frame.Binary) throw RpcResponseException("", "WS", Codes.INVALID_ARGUMENT, "Expected binary RPC request")
-                        val input = ProtobufInputStream(limits = limits)
-                        input.addBytes(frame.readBytes())
-                        emit(input.read(methodDescriptor.requestParser))
+                        emit(decodeRequest(frame.readBytes(), limits, methodDescriptor.requestParser))
                     }
                 }
                 val events = when (val handler = methodDescriptor.handler) {
@@ -208,7 +207,7 @@ public fun <Server: Any> Routing.serveStreamingInOut(
                     is ServerMethod.ClientServerStreaming -> handler.handler.invoke(server, context, requests)
                     else -> error("Invalid client streaming handler")
                 }
-                events.collect { event ->
+                events.takeWhile { it !is StreamControlEvent.Close<*> }.collect { event ->
                     when (event) {
                         is StreamControlEvent.Close<*> -> close()
                         is StreamControlEvent.Message<*> -> {
@@ -219,12 +218,15 @@ public fun <Server: Any> Routing.serveStreamingInOut(
                     }
                 }
                 close(CloseReason(CloseReason.Codes.NORMAL, ""))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (limit: ProtobufLimitException) {
                 close(CloseReason(4008.toShort(), "Request exceeds decoding limits"))
             } catch (rpcException: RpcResponseException) {
                 close(CloseReason(rpcException.code.toWSCode().toShort(), safeWSReason(rpcException.errorMessage)))
-            } catch (t: Throwable) {
-                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
+            } catch (t: Exception) {
+                call.application.log.error("RPC streaming handler failed (${call.request.path()})", t)
+                close(CloseReason(Codes.INTERNAL.toWSCode().toShort(), "Internal server error"))
             }
         }
     }
@@ -241,4 +243,18 @@ private suspend fun ApplicationCall.readBoundedBody(limit: Int): ByteArray {
         bytes.write(chunk, length = count)
     }
     return bytes.toByteArray()
+}
+
+private fun <T> decodeRequest(bytes: ByteArray, limits: ProtobufLimits, parser: (com.latenighthack.ktbuf.ProtobufReader) -> T): T {
+    try {
+        val input = ProtobufInputStream(limits = limits)
+        input.addBytes(bytes)
+        return input.read(parser)
+    } catch (limit: ProtobufLimitException) {
+        throw limit
+    } catch (malformed: IllegalArgumentException) {
+        throw RpcResponseException("", "DECODE", Codes.INVALID_ARGUMENT, "Malformed protobuf request", malformed)
+    } catch (malformed: IndexOutOfBoundsException) {
+        throw RpcResponseException("", "DECODE", Codes.INVALID_ARGUMENT, "Malformed protobuf request", malformed)
+    }
 }

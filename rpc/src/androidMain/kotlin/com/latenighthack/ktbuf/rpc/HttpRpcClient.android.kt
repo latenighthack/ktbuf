@@ -78,6 +78,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         val inbound = Channel<ByteArray>(64)
         val ready = CompletableDeferred<Unit>()
         val queuedBytes = java.util.concurrent.atomic.AtomicLong()
+        val transportFailure = java.util.concurrent.atomic.AtomicReference<Throwable?>()
         val byteLimit = com.latenighthack.ktbuf.ProtobufLimits().maxMessageBytes.toLong()
         var outboundClosed = false
         var halfCloseSupported = false
@@ -87,6 +88,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         val url = if (useApiGateway) method.toApiGatewayPath(wsUrl) else method.toPath(wsUrl)
         fun error(code: Codes, message: String, cause: Throwable? = null) = RpcResponseException(url, "WS", code, message, cause)
         fun fail(webSocket: WebSocket, cause: Throwable) {
+            transportFailure.compareAndSet(null, cause)
             ready.completeExceptionally(cause)
             inbound.close(cause)
             webSocket.cancel()
@@ -94,6 +96,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         fun finish(code: Int, reason: String) {
             val status = Status.fromWSCode(code, reason)
             val cause = if (status.code == Codes.OK) null else error(status.code, status.message)
+            if (cause != null) transportFailure.compareAndSet(null, cause)
             if (!ready.isCompleted) ready.completeExceptionally(cause ?: error(Codes.UNAVAILABLE, "Socket closed before opening"))
             inbound.close(cause)
         }
@@ -105,7 +108,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 try {
                     check(!outboundClosed) { "Request stream is closed" }
                     if (bytes.size > byteLimit) throw error(Codes.RESOURCE_EXHAUSTED, "RPC frame exceeds byte limit")
-                    if (!checkNotNull(socket).send(bytes.toByteString())) throw error(Codes.UNAVAILABLE, "WebSocket rejected the outgoing message")
+                    if (!checkNotNull(socket).send(bytes.toByteString())) throw transportFailure.get() ?: error(Codes.UNAVAILABLE, "WebSocket rejected the outgoing message")
                 } finally { sending.unlock() }
             }
             override suspend fun closeOutbound() {
@@ -114,7 +117,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                     if (!outboundClosed) {
                         ready.await()
                         if (!halfCloseSupported) throw error(Codes.UNIMPLEMENTED, "Peer does not support request half-close")
-                        if (!checkNotNull(socket).send(RPC_REQUESTS_END)) throw error(Codes.UNAVAILABLE, "WebSocket rejected request half-close")
+                        if (!checkNotNull(socket).send(RPC_REQUESTS_END)) throw transportFailure.get() ?: error(Codes.UNAVAILABLE, "WebSocket rejected request half-close")
                         outboundClosed = true
                     }
                 } finally { sending.unlock() }
