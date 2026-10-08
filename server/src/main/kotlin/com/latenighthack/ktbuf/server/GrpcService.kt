@@ -41,7 +41,7 @@ public fun <Server: Any> Routing.serveAll(
         } else if (method.streamingOut) {
             serveStreamingOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
         } else {
-            serveUnary<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>)
+            serveUnary<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
         }
     }
 }
@@ -54,17 +54,12 @@ public fun <Server: Any> Routing.serveUnary(
 ) {
     val path = "/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}"
     post(path) {
-        val stream = ProtobufInputStream()
-
-        stream.addBytes(call.receive<ByteArray>())
-
-        val request = stream.read(methodDescriptor.requestParser)
         try {
+            val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
+            val stream = ProtobufInputStream()
+            stream.addBytes(call.receive<ByteArray>())
+            val request = stream.read(methodDescriptor.requestParser)
             val handler = methodDescriptor.handler as ServerMethod.Unary
-            val context = contextProcessor(call.toGrpcRequestContext(
-                descriptor,
-                methodDescriptor
-            ))
 
             val outgoing = handler.handler.invoke(server, context, request)
             val outStream = ProtobufOutputStream()
@@ -96,18 +91,12 @@ public fun <Server: Any> Routing.serveStreamingOut(
     contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
 ) {
     webSocket("/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}") {
-        val stream = ProtobufInputStream()
-
-        val frame = incoming.receive()
-        stream.addBytes(frame.readBytes())
-
-        val context = contextProcessor(call.toGrpcRequestContext(
-            descriptor,
-            methodDescriptor
-        ))
-
-        val request = stream.read(methodDescriptor.requestParser)
         try {
+            val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
+            val stream = ProtobufInputStream()
+            val frame = incoming.receive()
+            stream.addBytes(frame.readBytes())
+            val request = stream.read(methodDescriptor.requestParser)
             (methodDescriptor.handler as ServerMethod.ServerStreaming).handler.invoke(server, context, request)
                 .onCompletion {
                     when (it) {
@@ -152,11 +141,9 @@ public fun <Server: Any> Routing.serveStreamingInOut(
     contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
 ) {
     webSocket("/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}") {
-        val handler = (methodDescriptor.handler as ServerMethod.ClientServerStreaming).handler
-        val context = contextProcessor(call.toGrpcRequestContext(
-            descriptor,
-            methodDescriptor
-        ))
+        try {
+            val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
+            val handler = (methodDescriptor.handler as ServerMethod.ClientServerStreaming).handler
 
         val requestFlow = channelFlow {
             whileSelect {
@@ -181,7 +168,6 @@ public fun <Server: Any> Routing.serveStreamingInOut(
             }
         }
 
-        try {
             handler(server, context, requestFlow)
                 .onCompletion {
                     when (it) {
