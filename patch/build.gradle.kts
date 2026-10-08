@@ -82,6 +82,7 @@ kotlin {
     }
     js {
         browser()
+        nodejs()
     }
     androidTarget {
         publishLibraryVariants("release")

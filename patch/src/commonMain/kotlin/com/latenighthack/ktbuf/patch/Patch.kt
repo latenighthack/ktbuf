@@ -5,6 +5,8 @@ import com.latenighthack.ktbuf.ProtobufOutputStream
 import com.latenighthack.ktbuf.ProtobufReader
 import com.latenighthack.ktbuf.ProtobufWriter
 import com.latenighthack.ktbuf.patch.Path.Component
+import com.latenighthack.ktbuf.ScopedProtobufReader
+import com.latenighthack.ktbuf.bytes.mutableLinkedByteArrayOf
 
 data class Path(val components: List<Component>) {
     data class Component(val fieldNumber: Int, val index: Int)
@@ -168,64 +170,30 @@ fun ByteArray.applyChanges(changes: List<Change>): ByteArray {
 
 private fun ProtobufReader.visitField(writer: ProtobufWriter, remainingComponents: List<Component>, visitor: (ProtobufWriter, ByteArray?) -> Unit) {
     val component = remainingComponents.first()
-
-    nextField()
-
-    var isDone = false
-    var remainingSkips = component.index
-
-    while (remainingSkips >= 0) {
-        if (currentFieldNumber == component.fieldNumber && isByteAvailable()) {
-            if (remainingSkips > 0) {
-                val bytes = skipField()
-
-                writer.encodeRaw(bytes)
-
-                nextField()
-            } else {
-                if (remainingComponents.size > 1) {
-                    // found, drill down
-                    readField { reader ->
-                        writer.encode(component.fieldNumber) {
-                            reader.visitField(this, remainingComponents.drop(1), visitor)
-                        }
-                    }
-                } else {
-                    // found, replace
-                    visitor(writer, skipField())
-                }
-
-                isDone = true
-
-                nextField()
-            }
-
-            remainingSkips -= 1
-        } else if (remainingSkips == 0) {
-            // not found, insert empty message and continue down but write a fake inner payload
+    var occurrences = 0
+    var handled = false
+    while (nextField()) {
+        val matches = currentFieldNumber == component.fieldNumber
+        if (matches && !handled && occurrences == component.index) {
             if (remainingComponents.size > 1) {
+                require(currentWireType == 2U) { "Patch container must be length-delimited" }
                 readField { reader ->
                     writer.encode(component.fieldNumber) {
-                        // drill down and continue to write
                         reader.visitField(this, remainingComponents.drop(1), visitor)
                     }
                 }
-            } else {
-                // insert our payload
-                visitor(writer, null)
+            } else visitor(writer, skipField())
+            handled = true
+        } else writer.encodeRaw(skipField())
+        if (matches) occurrences++
+    }
+    if (!handled) {
+        require(component.index == occurrences) { "Patch index exceeds the number of field occurrences" }
+        if (remainingComponents.size > 1) {
+            writer.encode(component.fieldNumber) {
+                ScopedProtobufReader(mutableLinkedByteArrayOf()).visitField(this, remainingComponents.drop(1), visitor)
             }
-
-            remainingSkips -= 1
-        }
-
-        // skip and copy anything before our field of interest
-        while ((currentFieldNumber != component.fieldNumber || isDone) && isByteAvailable()) {
-            val bytes = skipField()
-
-            writer.encodeRaw(bytes)
-
-            nextField()
-        }
+        } else visitor(writer, null)
     }
 }
 
@@ -313,6 +281,17 @@ private fun ProtobufReader.applyChange(change: Change): ByteArray {
 }
 
 fun ByteArray.applyChange(change: Change): ByteArray {
+    val path = when (change) {
+        is Change.Insert -> change.path
+        is Change.Require -> change.path
+        is Change.Replace -> change.path
+        is Change.Remove -> change.path
+        is Change.RemoveAll -> change.path
+        is Change.InsertDistinct -> change.path
+        is Change.RemoveDistinct -> change.path
+    }
+    require(path.components.isNotEmpty() && path.components.size <= 100) { "Invalid patch path depth" }
+    require(path.components.all { it.fieldNumber in 1..536870911 && it.index >= 0 }) { "Invalid patch path component" }
     val inputStream = ProtobufInputStream(size)
 
     inputStream.addBytes(this)
