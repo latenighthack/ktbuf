@@ -28,7 +28,7 @@ sealed class Change {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
 
-            other as Insert
+            if (other !is Insert) return false
 
             if (path != other.path) return false
             if (!message.contentEquals(other.message)) return false
@@ -193,48 +193,43 @@ private fun ProtobufReader.visitField(writer: ProtobufWriter, remainingComponent
     }
 }
 
-// Removes every occurrence of the terminal (length-delimited) field whose payload
-// equals `matchMessage`, drilling through any leading path components verbatim.
-private fun ProtobufReader.visitDistinct(writer: ProtobufWriter, remainingComponents: List<Component>, matchMessage: ByteArray) {
-    val component = remainingComponents.first()
-
-    if (remainingComponents.size > 1) {
-        // Copy everything as-is, descending into the first matching container.
-        while (isByteAvailable()) {
-            nextField()
-
-            if (currentFieldNumber == component.fieldNumber) {
-                readField { reader ->
-                    writer.encode(component.fieldNumber) {
-                        reader.visitDistinct(this, remainingComponents.drop(1), matchMessage)
-                    }
-                }
-            } else {
-                writer.encodeRaw(skipField())
-            }
+// A collection operation selects its parent by occurrence and visits terminal fields in wire order.
+private fun ProtobufReader.visitCollection(writer: ProtobufWriter, components: List<Component>, visitor: (ProtobufWriter, ProtobufReader, Int) -> Unit, after: (ProtobufWriter, Int) -> Unit = { _, _ -> }) {
+    val component = components.first()
+    var occurrences = 0
+    while (nextField()) {
+        if (currentFieldNumber != component.fieldNumber) writer.encodeRaw(skipField())
+        else {
+            if (components.size == 1) visitor(writer, this, occurrences)
+            else if (occurrences == component.index) {
+                require(currentWireType == 2U) { "Patch container must be length-delimited" }
+                readField { nested -> writer.encode(component.fieldNumber) { nested.visitCollection(this, components.drop(1), visitor, after) } }
+            } else writer.encodeRaw(skipField())
+            occurrences++
         }
-
-        return
     }
+    if (components.size == 1) after(writer, occurrences)
+    else require(component.index <= occurrences) { "Patch container index exceeds field occurrences" }
+}
 
-    while (isByteAvailable()) {
-        nextField()
+private fun messagePayload(raw: ByteArray, fieldNumber: Int): ByteArray {
+    val reader = ScopedProtobufReader(mutableLinkedByteArrayOf(*raw))
+    require(reader.nextField() && reader.currentFieldNumber == fieldNumber && reader.currentWireType == 2U) { "Protected replacement requires one matching message field" }
+    val payload = reader.readBytes()
+    require(!reader.nextField()) { "Replacement contains unrelated fields" }
+    return payload
+}
 
-        if (currentFieldNumber == component.fieldNumber) {
-            val payload = readBytes()
-
-            if (!payload.contentEquals(matchMessage)) {
-                writer.encode(component.fieldNumber) {
-                    encodeRaw(payload)
-                }
-            }
-        } else {
-            writer.encodeRaw(skipField())
-        }
+private fun filterFields(payload: ByteArray, selected: Set<Int>, keepSelected: Boolean): ByteArray = ProtobufOutputStream.encode {
+    val reader = ScopedProtobufReader(mutableLinkedByteArrayOf(*payload))
+    while (reader.nextField()) {
+        val keep = (reader.currentFieldNumber in selected) == keepSelected
+        val raw = reader.skipField()
+        if (keep) encodeRaw(raw)
     }
 }
 
-private fun ProtobufReader.applyChange(change: Change): ByteArray {
+private fun ProtobufReader.applyChange(change: Change, originalBytes: ByteArray): ByteArray {
     val output = ProtobufOutputStream()
 
     output.write { writer ->
@@ -252,7 +247,7 @@ private fun ProtobufReader.applyChange(change: Change): ByteArray {
                 visitField(writer, change.path.components) { writer, _ ->
                     // skip writing anything
                 }
-            is Change.RemoveAll -> TODO()
+            is Change.RemoveAll -> visitCollection(writer, change.path.components, { _, reader, _ -> reader.skipField() })
             is Change.Require -> {
                 visitField(writer, change.path.components) { writer, existing ->
                     if (existing != null) {
@@ -263,14 +258,37 @@ private fun ProtobufReader.applyChange(change: Change): ByteArray {
                 }
             }
             is Change.Replace -> {
-                visitField(writer, change.path.components) { writer, _ ->
-                    writer.encodeRaw(change.message)
+                visitField(writer, change.path.components) { writer, existing ->
+                    if (change.skipFieldNumbers.isEmpty()) writer.encodeRaw(change.message)
+                    else {
+                        val field = change.path.components.last().fieldNumber
+                        val protected = change.skipFieldNumbers.toSet()
+                        val replacement = filterFields(messagePayload(change.message, field), protected, false)
+                        val preserved = if (existing == null) byteArrayOf() else filterFields(messagePayload(existing, field), protected, true)
+                        writer.encode(field) { encodeRaw(replacement); encodeRaw(preserved) }
+                    }
                 }
             }
 
-            is Change.InsertDistinct -> TODO()
-            is Change.RemoveDistinct ->
-                visitDistinct(writer, change.path.components, change.message)
+            is Change.InsertDistinct -> {
+                var found = false
+                ProtobufOutputStream().write { probe ->
+                    visitCollection(probe, change.path.components, { _, reader, _ ->
+                        require(reader.currentWireType == 2U) { "Distinct matching requires a message field" }
+                        if (reader.readBytes().contentEquals(change.message)) found = true
+                    })
+                }
+                if (found) writer.encodeRaw(originalBytes)
+                else ScopedProtobufReader(mutableLinkedByteArrayOf(*originalBytes)).visitField(writer, change.path.components) { destination, existing ->
+                    destination.encode(change.path.components.last().fieldNumber) { encodeRaw(change.message) }
+                    if (existing != null) destination.encodeRaw(existing)
+                }
+            }
+            is Change.RemoveDistinct -> visitCollection(writer, change.path.components, { destination, reader, _ ->
+                require(reader.currentWireType == 2U) { "Distinct matching requires a message field" }
+                val payload = reader.readBytes()
+                if (!payload.contentEquals(change.message)) destination.encode(change.path.components.last().fieldNumber) { encodeRaw(payload) }
+            })
         }
     }
 
@@ -289,6 +307,13 @@ fun ByteArray.applyChange(change: Change): ByteArray {
     }
     require(path.components.isNotEmpty() && path.components.size <= com.latenighthack.ktbuf.ProtobufLimits().maxDepth) { "Invalid patch path depth" }
     require(path.components.all { it.fieldNumber in 1..536870911 && it.index >= 0 }) { "Invalid patch path component" }
+    when (change) {
+        is Change.RemoveDistinct -> require(change.path.components.last().index == 0 && change.matchPath == null && change.matchMessage == null) { "Match selectors are not supported" }
+        is Change.InsertDistinct -> require(change.matchPath == null && change.matchMessage == null) { "Match selectors are not supported" }
+        is Change.Replace -> require(change.skipFieldNumbers.all { it in 1..536870911 }) { "Invalid protected field number" }
+        is Change.RemoveAll -> require(change.path.components.last().index == 0) { "Collection removal requires terminal index zero" }
+        else -> Unit
+    }
     val inputStream = ProtobufInputStream(size)
 
     inputStream.addBytes(this)
@@ -304,6 +329,6 @@ fun ByteArray.applyChange(change: Change): ByteArray {
         // skip the field we're replacing
 
         // read the bytes until the end
-        it.applyChange(change)
+        it.applyChange(change, this)
     }
 }

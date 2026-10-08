@@ -17,40 +17,36 @@ open class EditorList<T>(
 
     override fun remove(element: T): Boolean {
         val index = backingList.indexOf(element)
-
-        if (index < 0) {
-            return false
-        }
-
-        val bytesToMatch = element.writer()
-        context.remove(fieldNumber, bytesToMatch)
-
-        // Remove from the backing list directly: routing through super.remove()
-        // would dispatch to the overridden removeAt() and emit a second,
-        // index-based change on top of the distinct one.
-        backingList.removeAt(index)
-
+        if (index < 0) return false
+        removeAt(index)
         return true
     }
 
     override fun removeAt(index: Int): T {
+        val existing = backingList[index] // Validate before recording.
         context.remove(fieldNumber, index)
-
-        return backingList.removeAt(index)
+        backingList.removeAt(index)
+        return existing
     }
 
     override fun set(index: Int, element: T): T {
-        // context replace
-        return backingList.set(index, element)
+        val existing = backingList[index]
+        val encoded = com.latenighthack.ktbuf.ProtobufOutputStream.encode {
+            encode(fieldNumber) { encodeRaw(element.writer()) }
+        }
+        context.changes.add(Change.Replace(context.pathPrefix.appending(fieldNumber, index), encoded, emptyList()))
+        backingList[index] = element
+        return existing
     }
 
     override fun add(index: Int, element: T) {
-        context.insert(fieldNumber, index, element.writer())
-        return backingList.add(index, element)
+        if (index < 0 || index > size) throw IndexOutOfBoundsException("Invalid insertion index: $index")
+        val encoded = element.writer()
+        context.insert(fieldNumber, index, encoded)
+        backingList.add(index, element)
     }
 
     fun addDistinct(element: T) {
-//        context.insert(fieldNumber, index, element.writer())
-//        return backingList.add(index, element)
+        if (!backingList.contains(element)) add(size, element)
     }
 }
