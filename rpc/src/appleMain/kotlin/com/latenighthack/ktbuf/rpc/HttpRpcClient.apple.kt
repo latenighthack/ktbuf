@@ -208,15 +208,21 @@ fun ByteArray.toNSData(): NSData {
 
 @OptIn(ExperimentalForeignApi::class)
 fun NSData.toByteArray(): ByteArray {
-    if (this.length.toInt() == 0) {
+    val length = checkedNativeByteCount(this.length)
+    if (length == 0) {
         return byteArrayOf()
     }
 
-    val byteArray = ByteArray(this.length.toInt())
+    val byteArray = ByteArray(length)
     memScoped {
         val buffer = byteArray.refTo(0).getPointer(this)
 
-        memcpy(buffer, this@toByteArray.bytes, this@toByteArray.length)
+        memcpy(buffer, this@toByteArray.bytes, length.toULong())
     }
     return byteArray
+}
+
+internal fun checkedNativeByteCount(length: ULong): Int {
+    require(length <= Int.MAX_VALUE.toULong()) { "Native byte data exceeds the Kotlin array size limit" }
+    return length.toInt()
 }
