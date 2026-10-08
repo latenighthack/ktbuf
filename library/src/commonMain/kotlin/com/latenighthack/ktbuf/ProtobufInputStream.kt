@@ -154,7 +154,7 @@ class ScopedProtobufReader(
     override fun readSFixedInt64(): Long = readFixedInt64().toLong()
 
     override fun <T> readField(builder: (ProtobufReader) -> T): T {
-        val expectedLength = readInt32()
+        val expectedLength = readLength()
 
         return builder(ScopedProtobufReader(input.subarray(0, expectedLength))).also {
             input.advance(expectedLength)
@@ -168,8 +168,16 @@ class ScopedProtobufReader(
     }
 
     override fun readBytes(): ByteArray {
-        val len = readInt32()
+        val len = readLength()
         return input.readAdvance(length = len)
+    }
+
+    private fun readLength(): Int {
+        val length = readVarInt()
+        require(length <= Int.MAX_VALUE.toULong() && length <= input.size.toULong()) {
+            "Length-delimited field exceeds its message boundary"
+        }
+        return length.toInt()
     }
 
     private fun nextByte(): Byte {
