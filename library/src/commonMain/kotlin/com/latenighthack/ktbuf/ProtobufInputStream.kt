@@ -67,19 +67,24 @@ class ScopedProtobufReader(
             return false
         }
 
-        val tag = readVarInt()
+        readTag()
+        require(currentFieldType != 4U) { "Unexpected end-group tag" }
+        return true
+    }
 
+    private fun readTag() {
+        val tag = readVarInt()
         require(tag <= UInt.MAX_VALUE.toULong() && tag shr 3 != 0UL && tag and 7UL <= 5UL) {
             "Invalid protobuf tag"
         }
         currentFieldNumber = (tag shr 3).toInt()
         currentFieldType = (tag and 7UL).toUInt()
-
-        return true
     }
 
-    override fun skipField(): ByteArray {
-        val result = MutableLinkedByteArray()
+    override fun skipField(): ByteArray = skipField(0)
+
+    private fun skipField(groupDepth: Int): ByteArray {
+        val result = MutableLinkedByteArray(32)
         val writer = ScopedProtobufWriter(result)
 
         when (currentFieldType) {
@@ -95,6 +100,24 @@ class ScopedProtobufReader(
             ProtoConstants.WireType.lengthDelimited -> {
                 writer.encode(readBytes(), currentFieldNumber)
             }
+            3U -> {
+                require(groupDepth < 100) { "Group nesting limit exceeded" }
+                val groupNumber = currentFieldNumber
+                writer.encode((groupNumber.toULong() shl 3) or 3UL, null)
+                while (true) {
+                    require(isByteAvailable()) { "Missing end-group tag" }
+                    readTag()
+                    if (currentFieldType == 4U) {
+                        require(currentFieldNumber == groupNumber) { "Mismatched end-group tag" }
+                        writer.encode((groupNumber.toULong() shl 3) or 4UL, null)
+                        currentFieldNumber = groupNumber
+                        currentFieldType = 3U
+                        break
+                    }
+                    writer.encodeRaw(skipField(groupDepth + 1))
+                }
+            }
+            else -> error("Unexpected end-group tag")
         }
 
         return result.toByteArray()
