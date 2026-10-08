@@ -2,144 +2,91 @@ package com.latenighthack.ktbuf.bytes
 
 import kotlin.math.max
 
-internal class ConcreteLinkedByteArray(private val bufferSize: Int = defaultBufferSize) : MutableLinkedByteArray {
+/** Offsets address the unread portion. reset rewinds; clear discards all data. */
+internal class ConcreteLinkedByteArray(bufferSize: Int = defaultBufferSize) : MutableLinkedByteArray {
     internal companion object {
         const val defaultBufferSize = 10 * 2048
-        const val defaultCacheLimit = 10
     }
-
-    private var buffer = ByteArray(bufferSize)
+    private var buffer = ByteArray(bufferSize.also { require(it >= 0) })
     private var cachedSize = 0
     private var tipOffset = 0
+    override val size: Int get() = cachedSize - tipOffset
 
-    override fun write(byte: Byte, destinationOffset: Int) {
-        val targetSize = max(cachedSize, destinationOffset + 1)
-
-        if (buffer.size < targetSize) {
-            buffer = buffer.copyOf(max(targetSize, buffer.size * 4 / 3))
+    private fun capacity(target: Int) {
+        if (target > buffer.size) {
+            val grown = (buffer.size.toLong() * 4 / 3).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            buffer = buffer.copyOf(max(target, grown))
         }
-        cachedSize = targetSize
-
-        buffer[destinationOffset] = byte
     }
-
+    override fun write(byte: Byte, destinationOffset: Int) = write(byteArrayOf(byte), 0, destinationOffset, 1)
     override fun write(bytes: ByteArray, sourceOffset: Int, destinationOffset: Int, length: Int) {
-        val targetSize = max(cachedSize, destinationOffset + length)
-
-        if (buffer.size < targetSize) {
-            buffer = buffer.copyOf(max(targetSize, buffer.size * 4 / 3))
-        }
-        cachedSize = targetSize
-
-        bytes.copyInto(buffer, destinationOffset, sourceOffset, length + sourceOffset)
+        checkRange(bytes.size, sourceOffset, length)
+        checkRange(size, destinationOffset, 0)
+        require(length <= Int.MAX_VALUE - tipOffset - destinationOffset) { "Buffer size overflow" }
+        val destination = tipOffset + destinationOffset
+        val target = max(cachedSize, destination + length)
+        capacity(target)
+        bytes.copyInto(buffer, destination, sourceOffset, sourceOffset + length)
+        cachedSize = target
     }
-
     override fun insert(bytes: ByteArray, sourceOffset: Int, destinationOffset: Int, length: Int) {
-        cachedSize += length
-
-        if (buffer.size < cachedSize) {
-            buffer = buffer.copyOf(cachedSize * 4 / 3)
-        }
-
-        buffer.copyInto(buffer, destinationOffset + length, destinationOffset, cachedSize - length)
-        bytes.copyInto(buffer, destinationOffset, sourceOffset, length + sourceOffset)
+        checkRange(bytes.size, sourceOffset, length)
+        checkRange(size, destinationOffset, 0)
+        require(length <= Int.MAX_VALUE - cachedSize) { "Buffer size overflow" }
+        val destination = tipOffset + destinationOffset
+        val target = cachedSize + length
+        capacity(target)
+        buffer.copyInto(buffer, destination + length, destination, cachedSize)
+        bytes.copyInto(buffer, destination, sourceOffset, sourceOffset + length)
+        cachedSize = target
     }
-
-    override val size: Int
-        get() = cachedSize - tipOffset
-
-    override fun reset() {
-        tipOffset = 0
-    }
-
-    override fun clear() {
-        cachedSize = 0
-        tipOffset = 0
-    }
-
-    override fun toByteArray(): ByteArray {
-        return buffer.copyOf(cachedSize)
-    }
-
+    override fun reset() { tipOffset = 0 }
+    override fun clear() { cachedSize = 0; tipOffset = 0 }
+    override fun toByteArray(): ByteArray = read()
     override fun copyTo(bytes: ByteArray, destinationOffset: Int, offset: Int, length: Int) {
-        buffer.copyInto(bytes, destinationOffset, tipOffset + offset, tipOffset + length + offset)
+        checkRange(size, offset, length)
+        checkRange(bytes.size, destinationOffset, length)
+        buffer.copyInto(bytes, destinationOffset, tipOffset + offset, tipOffset + offset + length)
     }
-
-    override fun read(bytes: ByteArray, destinationOffset: Int, length: Int) {
-        copyTo(bytes, destinationOffset, 0, length)
-    }
-
+    override fun read(bytes: ByteArray, destinationOffset: Int, length: Int) = copyTo(bytes, destinationOffset, 0, length)
     override fun read(length: Int): ByteArray {
+        checkRange(size, 0, length)
         return buffer.copyOfRange(tipOffset, tipOffset + length)
     }
-
     override fun readAdvance(bytes: ByteArray, destinationOffset: Int, length: Int) {
-        read(bytes, destinationOffset, length)
-        advance(length)
+        read(bytes, destinationOffset, length); advance(length)
     }
-
-    override fun readAdvance(length: Int): ByteArray {
-        return read(length).also {
-            advance(length)
-        }
-    }
-
-    override fun advance(length: Int) {
-        tipOffset += length
-    }
-
-    override fun subarray(offset: Int, length: Int): LinkedByteArray {
-        return LinkedByteSubarray(this, offset, length)
-    }
+    override fun readAdvance(length: Int): ByteArray = read(length).also { advance(length) }
+    override fun advance(length: Int) { checkRange(size, 0, length); tipOffset += length }
+    override fun subarray(offset: Int, length: Int): LinkedByteArray = LinkedByteSubarray(this, offset, length)
 }
 
-class LinkedByteSubarray(
-    private val parent: LinkedByteArray,
-    private val offset: Int,
-    private val length: Int
-) : LinkedByteArray {
+internal fun checkRange(size: Int, offset: Int, length: Int) {
+    require(offset >= 0 && length >= 0 && offset <= size && length <= size - offset) { "Range exceeds available bytes" }
+}
 
+class LinkedByteSubarray(private val parent: LinkedByteArray, private val offset: Int, private val length: Int) : LinkedByteArray {
+    init { checkRange(parent.size, offset, length) }
     private var progress = 0
-
-    override val size: Int
-        get() = length - progress
-
-    override fun reset() {
-        progress = length
-    }
-
-    override fun clear() {
-        reset()
-    }
-
-    override fun toByteArray(): ByteArray = ByteArray(size).also {
-        copyTo(it)
-    }
-
+    override val size: Int get() = length - progress
+    override fun reset() { progress = 0 }
+    override fun clear() { progress = length }
+    override fun toByteArray(): ByteArray = read()
     override fun copyTo(bytes: ByteArray, destinationOffset: Int, offset: Int, length: Int) {
-        parent.copyTo(bytes, destinationOffset, offset + this.offset + this.progress, length)
+        checkRange(size, offset, length)
+        checkRange(bytes.size, destinationOffset, length)
+        parent.copyTo(bytes, destinationOffset, this.offset + progress + offset, length)
     }
-
-    override fun read(bytes: ByteArray, destinationOffset: Int, length: Int) {
-        copyTo(bytes, destinationOffset, 0, length)
+    override fun read(bytes: ByteArray, destinationOffset: Int, length: Int) = copyTo(bytes, destinationOffset, 0, length)
+    override fun read(length: Int): ByteArray {
+        checkRange(size, 0, length)
+        return ByteArray(length).also { read(it) }
     }
-
-    override fun read(length: Int): ByteArray = ByteArray(length).also { read(it) }
-
-    override fun readAdvance(length: Int): ByteArray = read(length).also {
-        advance(length)
-    }
-
-    override fun readAdvance(bytes: ByteArray, destinationOffset: Int, length: Int) {
-        read(bytes, destinationOffset, length)
-        advance(length)
-    }
-
-    override fun advance(length: Int) {
-        progress += length
-    }
-
+    override fun readAdvance(length: Int): ByteArray = read(length).also { advance(length) }
+    override fun readAdvance(bytes: ByteArray, destinationOffset: Int, length: Int) { read(bytes, destinationOffset, length); advance(length) }
+    override fun advance(length: Int) { checkRange(size, 0, length); progress += length }
     override fun subarray(offset: Int, length: Int): LinkedByteArray {
-        return parent.subarray(offset + this.offset + this.progress, length)
+        checkRange(size, offset, length)
+        return LinkedByteSubarray(parent, this.offset + progress + offset, length)
     }
 }

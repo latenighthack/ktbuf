@@ -12,7 +12,7 @@ interface LinkedByteArray {
 
     fun toByteArray(): ByteArray
 
-    fun copyTo(bytes: ByteArray, destinationOffset: Int = 0, offset: Int = 0, length: Int = min(size - offset, bytes.size))
+    fun copyTo(bytes: ByteArray, destinationOffset: Int = 0, offset: Int = 0, length: Int = min(size - offset, bytes.size - destinationOffset))
 
     fun read(bytes: ByteArray, destinationOffset: Int = 0, length: Int = bytes.size - destinationOffset)
 
