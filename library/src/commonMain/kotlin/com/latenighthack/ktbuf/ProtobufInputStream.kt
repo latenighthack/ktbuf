@@ -190,7 +190,7 @@ class ScopedProtobufReader(
     override fun readBool(): Boolean = readVarInt() != 0UL
 
     override fun readString(): String {
-        return readBytes().decodeToString()
+        return readBytes().decodeToString(throwOnInvalidSequence = true)
     }
 
     override fun readBytes(): ByteArray {
