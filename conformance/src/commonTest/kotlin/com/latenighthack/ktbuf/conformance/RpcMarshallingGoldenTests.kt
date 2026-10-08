@@ -183,6 +183,7 @@ class RpcMarshallingGoldenTests {
         assertEquals(false to false, shapes["Unary"], "Unary is unary in and out")
         assertEquals(false to true, shapes["ServerStream"], "ServerStream streams out only")
         assertEquals(true to true, shapes["Bidi"], "Bidi streams both ways")
-        assertEquals(3, descriptor.methods.size, "no client-streaming method -- see conformance.proto")
+        assertEquals(true to false, shapes["ClientStream"], "ClientStream streams requests and returns one response")
+        assertEquals(4, descriptor.methods.size)
     }
 }

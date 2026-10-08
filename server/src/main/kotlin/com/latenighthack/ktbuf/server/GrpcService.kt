@@ -188,7 +188,6 @@ public fun <Server: Any> Routing.serveStreamingInOut(
             maxFrameSize = limits.maxMessageBytes.toLong()
             try {
                 val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
-                val handler = (methodDescriptor.handler as ServerMethod.ClientServerStreaming).handler
                 val requests = kotlinx.coroutines.flow.flow {
                     while (true) {
                         val frame = incoming.receiveCatching().getOrNull() ?: break
@@ -202,7 +201,14 @@ public fun <Server: Any> Routing.serveStreamingInOut(
                         emit(input.read(methodDescriptor.requestParser))
                     }
                 }
-                handler(server, context, requests).collect { event ->
+                val events = when (val handler = methodDescriptor.handler) {
+                    is ServerMethod.ClientStreaming -> kotlinx.coroutines.flow.flow {
+                        emit(StreamControlEvent.Message(handler.handler.invoke(server, context, requests)))
+                    }
+                    is ServerMethod.ClientServerStreaming -> handler.handler.invoke(server, context, requests)
+                    else -> error("Invalid client streaming handler")
+                }
+                events.collect { event ->
                     when (event) {
                         is StreamControlEvent.Close<*> -> close()
                         is StreamControlEvent.Message<*> -> {

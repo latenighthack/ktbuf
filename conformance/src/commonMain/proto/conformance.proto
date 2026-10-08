@@ -73,12 +73,10 @@ message OneOfHolder {
 message Empty {
 }
 
-// The three call shapes that work end to end. Client streaming (stream in, unary
-// out) is intentionally missing: GrpcService has no clientStreamServerUnary helper,
-// so protoc-gen-kt emits a client that does not compile, and serveAll would route it
-// to serveStreamingInOut and cast the handler to the wrong ServerMethod subtype.
+// All four RPC shapes compile and round trip through the runtime.
 service Conformance {
     rpc Unary(AllTypes) returns (AllTypes);
     rpc ServerStream(AllTypes) returns (stream AllTypes);
     rpc Bidi(stream AllTypes) returns (stream AllTypes);
+    rpc ClientStream(stream AllTypes) returns (AllTypes);
 }

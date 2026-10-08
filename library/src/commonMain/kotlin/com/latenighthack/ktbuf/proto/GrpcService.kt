@@ -114,6 +114,26 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             }
     }
 
+    protected suspend fun <RequestType, ResponseType> clientStreamServerUnary(
+        methodName: String,
+        request: Flow<RequestType>,
+        writeRequest: RequestType.(ProtobufWriter) -> Unit,
+        readResponse: (ProtobufReader) -> ResponseType,
+        generateExtraParams: ((RequestType) -> Map<String, String>)? = null,
+        readyCallback: () -> Unit = {}
+    ): ResponseType {
+        var seen = false
+        var response: ResponseType? = null
+        clientStreamServerStream(methodName, request, writeRequest, readResponse, generateExtraParams, readyCallback).collect {
+            if (seen) throw com.latenighthack.ktbuf.net.RpcResponseException(methodName, "WS", Codes.DATA_LOSS, "Expected exactly one RPC response")
+            seen = true
+            response = it
+        }
+        if (!seen) throw com.latenighthack.ktbuf.net.RpcResponseException(methodName, "WS", Codes.DATA_LOSS, "Expected exactly one RPC response")
+        @Suppress("UNCHECKED_CAST")
+        return response as ResponseType
+    }
+
     @OptIn(InternalCoroutinesApi::class)
     protected fun <RequestType, ResponseType> clientStreamServerStream(
         methodName: String,

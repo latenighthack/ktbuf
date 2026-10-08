@@ -65,6 +65,8 @@ class ConformanceTestServer(
         }
     }.map { StreamControlEvent.Message(it) }
 
+    override suspend fun clientStream(context: GrpcRequestContext, request: Flow<AllTypes>): AllTypes = AllTypes(fInt32 = request.toList().sumOf { it.fInt32 })
+
     override fun bidi(
         context: GrpcRequestContext,
         request: Flow<AllTypes>

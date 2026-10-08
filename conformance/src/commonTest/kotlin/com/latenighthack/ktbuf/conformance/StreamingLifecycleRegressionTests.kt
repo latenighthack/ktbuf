@@ -13,6 +13,15 @@ import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class StreamingLifecycleRegressionTests {
+    @Test fun clientStreamingUnaryRejectsZeroOrMultipleResponses() = runTest(timeout = 3.seconds) {
+        for (frames in listOf(emptyList(), listOf(AllTypes().toByteArray(), AllTypes().toByteArray()))) {
+            val failure = assertFailsWith<RpcResponseException> {
+                ConformanceServiceRpc(FakeRpcClient(serverFrames = frames)).clientStream(flowOf(AllTypes()))
+            }
+            assertEquals(Codes.DATA_LOSS, failure.code)
+        }
+        assertEquals(AllTypes(fInt32 = 7), ConformanceServiceRpc(FakeRpcClient(serverFrames = listOf(AllTypes(fInt32 = 7).toByteArray()))).clientStream(emptyFlow()))
+    }
     private fun transport(stream: RpcServerStream) = object : RpcClient {
         override suspend fun unaryCall(method: RpcMethodSpecifier, headers: Map<String, String>, request: ByteArray) = error("unused")
         override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) { readyCallback(); stream.block() }
