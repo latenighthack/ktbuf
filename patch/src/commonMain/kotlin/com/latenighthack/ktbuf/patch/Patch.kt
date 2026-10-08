@@ -140,17 +140,13 @@ data class EditContext(
             return
         }
 
-        val currentPath = pathPrefix.components.last()
-
-        currentPath.fieldNumber
-
         if (index < 0) {
             changes.add(Change.Require(
-                pathPrefix.appending(currentPath.fieldNumber, currentPath.index)
+                pathPrefix
             ))
         } else {
             changes.add(index, Change.Require(
-                pathPrefix.appending(currentPath.fieldNumber, currentPath.index)
+                pathPrefix
             ))
         }
     }
@@ -260,8 +256,9 @@ private fun ProtobufReader.applyChange(change: Change): ByteArray {
             is Change.Require -> {
                 visitField(writer, change.path.components) { writer, existing ->
                     if (existing != null) {
-                        writer.encode(change.path.components.last().fieldNumber) {
-                        }
+                        writer.encodeRaw(existing)
+                    } else {
+                        writer.encode(change.path.components.last().fieldNumber) {}
                     }
                 }
             }
