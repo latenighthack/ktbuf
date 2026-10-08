@@ -88,15 +88,12 @@ class RepeatedAndEdgeCaseGoldenTests {
     }
 
     @Test
-    fun boolTreatsNonOneVarintAsFalse() {
-        // Canonical protobuf treats any non-zero varint as true; ktbuf's readBool()
-        // compares against 1 exactly. A field carrying 2 therefore reads as false.
-        // Characterizing it so the divergence is visible and testable.
+    fun boolTreatsNonzeroVarintsAsTrue() {
         val two = encode { encode(2, 1) }
 
         val decoded = decodeFirstField(two) { it.readBool() }
 
-        assertFalse(decoded, "readBool() currently only treats exactly 1 as true")
+        assertTrue(decoded, "protobuf treats every nonzero varint as true")
 
         assertTrue(decodeFirstField(WireGoldens.BOOL_True.hexToBytes()) { it.readBool() })
         assertFalse(decodeFirstField(WireGoldens.BOOL_False.hexToBytes()) { it.readBool() })
