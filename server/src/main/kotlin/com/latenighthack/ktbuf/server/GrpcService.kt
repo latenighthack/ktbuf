@@ -8,7 +8,7 @@ import com.latenighthack.ktbuf.proto.Codes
 import io.ktor.utils.io.*
 import com.latenighthack.ktbuf.ProtobufOutputStream
 import com.latenighthack.ktbuf.net.*
-import com.latenighthack.ktbuf.proto.toHttpCode
+import com.latenighthack.ktbuf.proto.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -94,6 +94,7 @@ public fun <Server: Any> Routing.serveUnary(
         } catch (limit: ProtobufLimitException) {
             call.respondText("Request exceeds decoding limits", status = HttpStatusCode.TooManyRequests)
         } catch (rpcException: RpcResponseException) {
+            call.response.headers.append(RPC_STATUS_HEADER, rpcException.code.value.toString())
             call.respondText(
                 rpcException.errorMessage,
                 status = HttpStatusCode(rpcException.code.toHttpCode(), rpcException.code.name)
@@ -132,7 +133,7 @@ public fun <Server: Any> Routing.serveStreamingOut(
                 .onCompletion {
                     when (it) {
                         null -> close(CloseReason(CloseReason.Codes.NORMAL, ""))
-                        is RpcResponseException -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, it.errorMessage))
+                        is RpcResponseException -> close(reason = CloseReason(it.code.toWSCode().toShort(), safeWSReason(it.errorMessage)))
                         else -> close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
                     }
                 }
@@ -159,7 +160,7 @@ public fun <Server: Any> Routing.serveStreamingOut(
         } catch (limit: ProtobufLimitException) {
             close(reason = CloseReason(4008.toShort(), "Request exceeds decoding limits"))
         } catch (rpcException: RpcResponseException) {
-            close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))
+            close(reason = CloseReason(rpcException.code.toWSCode().toShort(), safeWSReason(rpcException.errorMessage)))
         } catch (t: Throwable) {
             close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
         }
@@ -215,7 +216,7 @@ public fun <Server: Any> Routing.serveStreamingInOut(
             } catch (limit: ProtobufLimitException) {
                 close(CloseReason(4008.toShort(), "Request exceeds decoding limits"))
             } catch (rpcException: RpcResponseException) {
-                close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))
+                close(CloseReason(rpcException.code.toWSCode().toShort(), safeWSReason(rpcException.errorMessage)))
             } catch (t: Throwable) {
                 close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
             }

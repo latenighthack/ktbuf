@@ -2,7 +2,7 @@ package com.latenighthack.ktbuf.net
 
 import com.latenighthack.ktbuf.proto.Codes
 import com.latenighthack.ktbuf.proto.Status
-import com.latenighthack.ktbuf.proto.fromHTTPCode
+import com.latenighthack.ktbuf.proto.*
 import com.latenighthack.ktbuf.rpc.toByteArray
 import com.latenighthack.ktbuf.rpc.toNSData
 import kotlinx.cinterop.BetaInteropApi
@@ -34,7 +34,7 @@ actual class PlatformHttpClient: HttpClient {
                     RpcResponseException(
                         path = url,
                         verb = method,
-                        code = Codes.from(error.code.toInt()),
+                        code = nativeTransportCode(error.domain, error.code),
                         errorMessage = error.localizedDescription ?: "Unknown error"
                     )
                 )
@@ -45,7 +45,7 @@ actual class PlatformHttpClient: HttpClient {
                     val errorMessage = data?.let {
                         NSString.create(data = it, encoding = NSUTF8StringEncoding)?.toString()
                     } ?: ""
-                    val status = Status.fromHTTPCode(statusCode, errorMessage)
+                    val status = Status.fromHTTPCode(statusCode, errorMessage, httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }.rpcHeader(RPC_STATUS_HEADER))
                     continuation.resumeWithException(
                         RpcResponseException(
                             path = url,

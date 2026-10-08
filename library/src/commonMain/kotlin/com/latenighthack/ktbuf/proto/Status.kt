@@ -33,13 +33,7 @@ enum class Codes(val value: Int) {
     }
 
     companion object {
-        fun from(value: Int) = if (value > 100) {
-            Codes.UNKNOWN
-        } else if (value > 16) {
-            Codes.UNKNOWN
-        } else {
-            Codes.ABORTED
-        }
+        fun from(value: Int): Codes = entries.firstOrNull { it.value == value } ?: UNKNOWN
     }
 }
 
@@ -48,8 +42,8 @@ data class Status(val code: Codes, val message: String) {
 }
 
 // https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
-fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?): Status {
-    val code = when (httpCode) {
+fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?, statusHeader: String? = null): Status {
+    val code = if (statusHeader != null) Codes.from(statusHeader.toIntOrNull() ?: -1) else when (httpCode) {
         200 -> Codes.OK
         400 -> {
             val lowerMessage = message?.lowercase()
@@ -129,4 +123,24 @@ fun Status.Companion.fromWSCode(wsCode: Int, message: String?): Status {
     }
 
     return Status(code, message ?: "")
+}
+
+/** Explicit status metadata prevents ambiguous HTTP statuses from depending on message text. */
+const val RPC_STATUS_HEADER = "grpc-status"
+fun Map<String, String>.rpcHeader(name: String): String? = entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+fun Codes.toWSCode(): Int = if (this == Codes.OK) 1000 else 4000 + value
+
+/** RFC 6455 reserves two bytes of a 125-byte control frame for its close code. */
+fun safeWSReason(message: String): String {
+    val bytes = message.encodeToByteArray()
+    var end = minOf(123, bytes.size)
+    while (end > 0 && end < bytes.size && (bytes[end].toInt() and 0xc0) == 0x80) end--
+    return bytes.decodeToString(0, end)
+}
+
+fun nativeTransportCode(domain: String?, code: Long): Codes = if (domain != "NSURLErrorDomain") Codes.UNKNOWN else when (code) {
+    -999L -> Codes.CANCELLED
+    -1001L -> Codes.CLIENT_TIMEOUT
+    -1000L, -1002L -> Codes.INVALID_ARGUMENT
+    else -> Codes.UNAVAILABLE
 }

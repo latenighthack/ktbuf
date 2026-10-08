@@ -84,7 +84,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                     RpcResponseException(
                         path = url,
                         verb = "POST",
-                        code = Codes.from(error.code.toInt()),
+                        code = nativeTransportCode(error.domain, error.code),
                         errorMessage = error.localizedDescription ?: "Unknown error"
                     )
                 )
@@ -95,7 +95,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                     val errorMessage = data?.let {
                         NSString.create(data = it, encoding = NSUTF8StringEncoding)?.toString()
                     } ?: ""
-                    val status = Status.fromHTTPCode(statusCode, errorMessage)
+                    val status = Status.fromHTTPCode(statusCode, errorMessage, httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }.rpcHeader(RPC_STATUS_HEADER))
                     continuation.resumeWithException(
                         RpcResponseException(
                             path = url,
@@ -141,7 +141,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                             RpcResponseException(
                                 path = url,
                                 verb = "RECEIVE",
-                                code = Codes.from(error.code.toInt()),
+                                code = nativeTransportCode(error.domain, error.code),
                                 errorMessage = error.localizedDescription ?: "Unknown error"
                             )
                         )
@@ -162,7 +162,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                             RpcResponseException(
                                 path = url,
                                 verb = "SEND",
-                                code = Codes.from(error.code.toInt()),
+                                code = nativeTransportCode(error.domain, error.code),
                                 errorMessage = error.localizedDescription ?: "Unknown error"
                             )
                         )

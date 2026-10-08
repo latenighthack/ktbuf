@@ -49,7 +49,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                         response.use {
                             if (response.code > 299 || response.code < 200) {
                                 val errorMessage = response.body!!.string()
-                                val status = Status.fromHTTPCode(response.code, errorMessage)
+                                val status = Status.fromHTTPCode(response.code, errorMessage, response.header(RPC_STATUS_HEADER))
                                 throw RpcResponseException(method.toPath(""), "POST", status.code, status.message, RuntimeException(errorMessage))
                             } else {
                                 RpcResponse(response.body!!.bytes(), response.headers.toMap())
@@ -133,7 +133,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 }
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { finish(code, reason) }
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    val status = response?.takeIf { it.code >= 400 }?.let { Status.fromHTTPCode(it.code, it.message) }
+                    val status = response?.takeIf { it.code >= 400 }?.let { Status.fromHTTPCode(it.code, it.message, it.header(RPC_STATUS_HEADER)) }
                     fail(webSocket, error(status?.code ?: Codes.UNAVAILABLE, status?.message ?: "WebSocket transport failed", t))
                     response?.body?.close()
                 }

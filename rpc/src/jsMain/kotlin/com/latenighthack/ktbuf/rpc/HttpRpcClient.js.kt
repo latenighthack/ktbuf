@@ -45,7 +45,7 @@ private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<Rp
         if (xhr.status / 100 == 2) {
             coroutineContext.resume(RpcResponse(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>(), headers))
         } else {
-            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText())
+            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText(), xhr.getResponseHeader(RPC_STATUS_HEADER))
             coroutineContext.resumeWithException(RpcResponseException(xhr.responseURL, "POST", status.code, status.message))
         }
     }
@@ -94,7 +94,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             }
             webSocket.onclose = {
                 window.setTimeout({
-                    receiveChannel.close(RpcResponseException(webSocket.url, "WS", Codes.from((it as CloseEvent).code.toInt()), (it as CloseEvent).reason))
+                    receiveChannel.close(RpcResponseException(webSocket.url, "WS", Status.fromWSCode((it as CloseEvent).code.toInt(), it.reason).code, (it as CloseEvent).reason))
                 }, 20)
             }
             webSocket.onerror = {

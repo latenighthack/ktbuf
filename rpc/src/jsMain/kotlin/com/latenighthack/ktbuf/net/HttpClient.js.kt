@@ -1,7 +1,7 @@
 package com.latenighthack.ktbuf.net
 
 import com.latenighthack.ktbuf.proto.Status
-import com.latenighthack.ktbuf.proto.fromHTTPCode
+import com.latenighthack.ktbuf.proto.*
 import com.latenighthack.ktbuf.rpc.errorBodyText
 import org.khronos.webgl.ArrayBuffer
 import org.khronos.webgl.Int8Array
@@ -29,7 +29,7 @@ private fun statusHandler(method: String, xhr: XMLHttpRequest, coroutineContext:
         if (xhr.status / 100 == 2) {
             coroutineContext.resume(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>())
         } else {
-            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText())
+            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText(), xhr.getResponseHeader(RPC_STATUS_HEADER))
             coroutineContext.resumeWithException(RpcResponseException(xhr.responseURL, method, status.code, status.message))
         }
     }

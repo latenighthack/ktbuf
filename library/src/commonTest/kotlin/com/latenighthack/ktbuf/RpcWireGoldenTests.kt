@@ -10,6 +10,7 @@ import com.latenighthack.ktbuf.proto.Status
 import com.latenighthack.ktbuf.proto.fromHTTPCode
 import com.latenighthack.ktbuf.proto.fromWSCode
 import com.latenighthack.ktbuf.proto.toHttpCode
+import com.latenighthack.ktbuf.proto.toWSCode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -236,22 +237,20 @@ class RpcWireGoldenTests {
         }
     }
 
-    @Test
-    fun codesFromIntIsCurrentlyBroken() {
-        // CHARACTERIZATION TEST -- this pins a bug, it does not endorse it.
-        //
-        // Codes.from() ignores the value entirely: anything <= 16 becomes ABORTED and
-        // anything above becomes UNKNOWN, so it never returns the code it was handed.
-        // It is live in HttpRpcClient.apple.kt (NSError codes) and HttpRpcClient.js.kt
-        // (WebSocket close codes), where a normal 1000 close currently surfaces as
-        // UNKNOWN and an arbitrary NSError surfaces as the retriable ABORTED.
-        //
-        // Fixing it is a behaviour change and deliberately out of scope here; this test
-        // will fail the moment someone corrects it, which is the intent.
-        assertEquals(Codes.ABORTED, Codes.from(0), "0 should map to OK but yields ABORTED")
-        assertEquals(Codes.ABORTED, Codes.from(5), "5 should map to NOT_FOUND but yields ABORTED")
-        assertEquals(Codes.ABORTED, Codes.from(16), "16 should map to UNAUTHENTICATED but yields ABORTED")
-        assertEquals(Codes.UNKNOWN, Codes.from(17))
-        assertEquals(Codes.UNKNOWN, Codes.from(1000), "a WebSocket 1000 close reads as UNKNOWN")
+    @Test fun everyCodeConvertsFromItsValueAndUnknownValuesAreStable() {
+        for (code in Codes.entries) assertEquals(code, Codes.from(code.value))
+        for (invalid in listOf(-1, 17, 99, 101, Int.MAX_VALUE)) assertEquals(Codes.UNKNOWN, Codes.from(invalid))
+    }
+    @Test fun explicitStatusMetadataWinsOverArbitraryMessages() {
+        for (code in Codes.entries) {
+            assertEquals(code, Status.fromHTTPCode(code.toHttpCode(), "arbitrary detail", code.value.toString()).code)
+            assertEquals(code, Status.fromWSCode(code.toWSCode(), "arbitrary detail").code)
+        }
+        assertEquals(Codes.UNKNOWN, Status.fromHTTPCode(400, "internal", "garbage").code)
+        assertEquals(Codes.CLIENT_TIMEOUT, com.latenighthack.ktbuf.proto.nativeTransportCode("NSURLErrorDomain", -1001))
+        assertEquals(Codes.CANCELLED, com.latenighthack.ktbuf.proto.nativeTransportCode("NSURLErrorDomain", -999))
+        assertEquals(Codes.UNKNOWN, com.latenighthack.ktbuf.proto.nativeTransportCode("OtherDomain", 5))
+        val safe = com.latenighthack.ktbuf.proto.safeWSReason("雪".repeat(100))
+        assertEquals("雪".repeat(41), safe)
     }
 }

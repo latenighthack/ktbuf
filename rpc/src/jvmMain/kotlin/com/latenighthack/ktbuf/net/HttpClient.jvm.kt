@@ -3,6 +3,7 @@ package com.latenighthack.ktbuf.net
 import com.latenighthack.ktbuf.net.RpcResponseException
 import com.latenighthack.ktbuf.proto.Status
 import com.latenighthack.ktbuf.proto.fromHTTPCode
+import com.latenighthack.ktbuf.proto.RPC_STATUS_HEADER
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -48,7 +49,7 @@ actual class PlatformHttpClient: HttpClient {
                         response.use {
                             if (response.code > 299 || response.code < 200) {
                                 val errorMessage = response.body!!.string()
-                                val status = Status.fromHTTPCode(response.code, errorMessage)
+                                val status = Status.fromHTTPCode(response.code, errorMessage, response.header(RPC_STATUS_HEADER))
                                 throw RpcResponseException(url, method, status.code, status.message, RuntimeException(errorMessage))
                             } else {
                                 response.body!!.bytes()
