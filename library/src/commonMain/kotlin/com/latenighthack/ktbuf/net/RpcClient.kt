@@ -5,8 +5,38 @@ import com.latenighthack.ktbuf.ProtobufWriter
 import com.latenighthack.ktbuf.proto.Codes
 import kotlinx.coroutines.flow.Flow
 
-fun RpcMethodSpecifier.toPath(serverPath: String) = "${serverPath}/api/${packageName}.${serviceName}/${methodName}${if (additionalParameters.isNotEmpty()) { "?" } else { "" }}${additionalParameters.map { "${it.key}=${it.value}" }.joinToString("&")}"
-fun RpcMethodSpecifier.toApiGatewayPath(serverPath: String) = "${serverPath}/ws_${packageName.replace('.', '_')}_${serviceName.replace('.', '_')}_${methodName}"
+private fun String.urlComponent(): String = buildString {
+    for (byte in this@urlComponent.encodeToByteArray()) {
+        val value = byte.toInt() and 255
+        if (value in 65..90 || value in 97..122 || value in 48..57 || value == 45 || value == 46 || value == 95 || value == 126) append(value.toChar())
+        else { append('%'); append("0123456789ABCDEF"[value ushr 4]); append("0123456789ABCDEF"[value and 15]) }
+    }
+}
+
+private fun RpcMethodSpecifier.queryString(): String = if (additionalParameters.isEmpty()) "" else
+    additionalParameters.entries.joinToString("&", prefix = "?") { "${it.key.urlComponent()}=${it.value.urlComponent()}" }
+
+fun RpcMethodSpecifier.toPath(serverPath: String) = "${serverPath.trimEnd('/')}/api/${"$packageName.$serviceName".urlComponent()}/${methodName.urlComponent()}${queryString()}"
+fun RpcMethodSpecifier.toApiGatewayPath(serverPath: String) = "${serverPath.trimEnd('/')}/ws_${packageName.replace('.', '_').urlComponent()}_${serviceName.replace('.', '_').urlComponent()}_${methodName.urlComponent()}${queryString()}"
+
+/** Bare addresses use HTTP; explicit HTTP/WS schemes retain their security choice. */
+fun rpcHttpBaseUrl(serverPath: String): String {
+    require(serverPath.isNotBlank() && serverPath.none { it.isWhitespace() || it == '?' || it == '#' }) { "Invalid RPC base URL" }
+    val scheme = serverPath.substringBefore("://", "").lowercase()
+    val base = when (scheme) {
+        "" -> "http://$serverPath"
+        "http", "https" -> "$scheme://${serverPath.substringAfter("://")}"
+        "ws" -> "http://${serverPath.substringAfter("://")}"
+        "wss" -> "https://${serverPath.substringAfter("://")}"
+        else -> throw IllegalArgumentException("Unsupported RPC URL scheme: $scheme")
+    }
+    require(base.substringAfter("://").substringBefore('/').isNotEmpty()) { "RPC base URL requires a host" }
+    return base.trimEnd('/')
+}
+
+fun rpcWebSocketBaseUrl(serverPath: String): String = rpcHttpBaseUrl(serverPath).let {
+    if (it.startsWith("https://")) "wss://${it.removePrefix("https://")}" else "ws://${it.removePrefix("http://") }"
+}
 
 data class GrpcRequestContext(
     val originalUrl: String,

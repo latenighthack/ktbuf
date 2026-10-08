@@ -71,14 +71,13 @@ private suspend fun httpPost(host: String, headers: Map<String, String>, path: S
 }
 
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
-    private val secure = serverPath.startsWith("https://")
 
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
         headers: Map<String, String>,
         request: ByteArray
     ): RpcResponse {
-        return httpPost(serverPath, headers, method.toPath(""), secure, request)
+        return httpPost(rpcHttpBaseUrl(serverPath), headers, if (useApiGateway) method.toApiGatewayPath("") else method.toPath(""), true, request)
     }
 
     private class WebSocketServerStream(private val webSocket: WebSocket, private val readyCallback: () -> Unit) : RpcServerStream {
@@ -161,7 +160,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             js("global.WebSocket = require('websocket').w3cwebsocket")
         }
 
-        val serverWsUrl = if (secure) serverPath.replace("https:", "wss:") else "ws://${serverPath.replace("http://", "")}"
+        val serverWsUrl = rpcWebSocketBaseUrl(serverPath)
         val wsUrl = if (useApiGateway) {
             method.toApiGatewayPath(serverWsUrl)
         } else {

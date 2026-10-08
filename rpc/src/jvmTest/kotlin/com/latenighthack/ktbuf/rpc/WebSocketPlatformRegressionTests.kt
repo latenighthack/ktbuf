@@ -13,6 +13,18 @@ import kotlin.concurrent.thread
 import kotlin.test.*
 
 class WebSocketPlatformRegressionTests {
+    @Test fun explicitSchemesAndGatewayParametersReachThePeerIntact() = runBlocking<Unit> {
+        for (scheme in listOf("http://", "ws://")) Peer(0).use { peer ->
+            val job = launch(Dispatchers.Default) {
+                HttpRpcClient("${scheme}127.0.0.1:${peer.listener.localPort}/", true).serverStreamingCall(
+                    RpcMethodSpecifier("p", "S", "M", mapOf("a&" to "+#雪")), { receive() }, {})
+            }
+            try {
+                assertTrue(peer.opened.await(2, TimeUnit.SECONDS))
+                assertEquals("/ws_p_S_M?a%26=%2B%23%E9%9B%AA", peer.path)
+            } finally { job.cancelAndJoin() }
+        }
+    }
     private class Peer(private val frames:Int):AutoCloseable {
         val listener=ServerSocket(0)
         val opened=CountDownLatch(1)

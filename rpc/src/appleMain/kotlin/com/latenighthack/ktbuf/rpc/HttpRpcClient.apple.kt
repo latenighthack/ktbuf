@@ -67,7 +67,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         headers: Map<String, String>,
         request: ByteArray
     ): RpcResponse = suspendCoroutine { continuation ->
-        val url = method.toPath(serverPath)
+        val url = if (useApiGateway) method.toApiGatewayPath(rpcHttpBaseUrl(serverPath)) else method.toPath(rpcHttpBaseUrl(serverPath))
         val requestUrl = NSURL.URLWithString(url)!!
         val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl).apply {
             HTTPMethod = "POST"
@@ -120,9 +120,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         readyCallback: () -> Unit
     ) {
         val url = if (useApiGateway) {
-            method.toApiGatewayPath(serverPath)
+            method.toApiGatewayPath(rpcWebSocketBaseUrl(serverPath))
         } else {
-            method.toPath(serverPath)
+            method.toPath(rpcWebSocketBaseUrl(serverPath))
         }
 
         val requestUrl = NSURL.URLWithString(url)!!

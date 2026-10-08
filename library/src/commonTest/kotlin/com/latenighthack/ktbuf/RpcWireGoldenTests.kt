@@ -3,6 +3,8 @@ package com.latenighthack.ktbuf
 import com.latenighthack.ktbuf.net.RpcMethodSpecifier
 import com.latenighthack.ktbuf.net.toApiGatewayPath
 import com.latenighthack.ktbuf.net.toPath
+import com.latenighthack.ktbuf.net.rpcHttpBaseUrl
+import com.latenighthack.ktbuf.net.rpcWebSocketBaseUrl
 import com.latenighthack.ktbuf.proto.Codes
 import com.latenighthack.ktbuf.proto.Status
 import com.latenighthack.ktbuf.proto.fromHTTPCode
@@ -17,6 +19,20 @@ import kotlin.test.assertTrue
 // on every target. These are the contracts a server or a peer client sees: change a
 // path shape or a status mapping and existing deployments break.
 class RpcWireGoldenTests {
+    @Test fun platformBaseUrlsPreserveSchemesAndNormalizeBareHosts() {
+        for ((source, http, ws) in listOf(
+            Triple("host:8080/", "http://host:8080", "ws://host:8080"),
+            Triple("http://host/base/", "http://host/base", "ws://host/base"),
+            Triple("https://host/", "https://host", "wss://host"),
+            Triple("ws://host", "http://host", "ws://host"),
+            Triple("wss://host", "https://host", "wss://host")
+        )) {
+            assertEquals(http, rpcHttpBaseUrl(source)); assertEquals(ws, rpcWebSocketBaseUrl(source))
+        }
+        for (bad in listOf("", "https://", "ftp://host", "host?query", "host#fragment")) {
+            kotlin.test.assertFailsWith<IllegalArgumentException> { rpcHttpBaseUrl(bad) }
+        }
+    }
     @Test
     fun unaryPathsMatchGoldens() {
         val method = RpcMethodSpecifier("com.example.v1", "Greeter", "SayHello")
@@ -47,10 +63,17 @@ class RpcWireGoldenTests {
     }
 
     @Test
-    fun apiGatewayPathIgnoresQueryParameters() {
+    fun apiGatewayPathPreservesQueryParameters() {
         val method = RpcMethodSpecifier("pkg", "Svc", "M", mapOf("a" to "1"))
 
-        assertEquals("/ws_pkg_Svc_M", method.toApiGatewayPath(""))
+        assertEquals("/ws_pkg_Svc_M?a=1", method.toApiGatewayPath(""))
+    }
+
+    @Test fun reservedCharactersAreEncodedAsIndependentComponents() {
+        val method = RpcMethodSpecifier("p", "S", "M/#", linkedMapOf("a&+%=#雪" to "v&+%=#雪"))
+        val query = "?a%26%2B%25%3D%23%E9%9B%AA=v%26%2B%25%3D%23%E9%9B%AA"
+        assertEquals("https://host/api/p.S/M%2F%23$query", method.toPath("https://host/"))
+        assertEquals("wss://host/ws_p_S_M%2F%23$query", method.toApiGatewayPath("wss://host/"))
     }
 
     @Test

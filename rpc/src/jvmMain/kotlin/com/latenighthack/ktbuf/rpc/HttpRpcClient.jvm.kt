@@ -14,7 +14,6 @@ import java.io.IOException
 @OptIn(ExperimentalCoroutinesApi::class)
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
     private val client: OkHttpClient = OkHttpClient()
-    private val isSecure = serverPath.startsWith("https")
 
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
@@ -23,9 +22,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
     ): RpcResponse {
         return suspendCancellableCoroutine { continuation ->
             val path = if (useApiGateway) {
-                method.toApiGatewayPath("${if (isSecure) "" else "http://"}$serverPath")
+                method.toApiGatewayPath(rpcHttpBaseUrl(serverPath))
             } else {
-                method.toPath("${if (isSecure) "" else "http://"}$serverPath")
+                method.toPath(rpcHttpBaseUrl(serverPath))
             }
             val unaryRequest = Request.Builder()
                 .url(path)
@@ -83,8 +82,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         var outboundClosed = false
         val sending = kotlinx.coroutines.sync.Mutex()
         var socket: WebSocket? = null
-        val wsUrl = if (isSecure) serverPath.replace("https:", "wss:")
-            else "ws://${serverPath.replace("http://", "")}"
+        val wsUrl = rpcWebSocketBaseUrl(serverPath)
         val url = if (useApiGateway) method.toApiGatewayPath(wsUrl) else method.toPath(wsUrl)
         fun error(code: Codes, message: String, cause: Throwable? = null) = RpcResponseException(url, "WS", code, message, cause)
         fun fail(webSocket: WebSocket, cause: Throwable) {
