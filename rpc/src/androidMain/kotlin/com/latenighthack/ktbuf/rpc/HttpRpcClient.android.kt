@@ -7,16 +7,11 @@ import kotlinx.coroutines.channels.Channel
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.internal.closeQuietly
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
-import java.io.EOFException
 import java.io.IOException
-import java.net.ConnectException
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
-@OptIn(ExperimentalCoroutinesApi::class, ObsoleteCoroutinesApi::class, DelicateCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
     private val client: OkHttpClient = OkHttpClient()
     private val isSecure = serverPath.startsWith("https")
@@ -76,122 +71,88 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         }
     }
 
-    private class StreamContext : RpcServerStream {
-        val inbound = Channel<ByteArray>()
-        val outbound = Channel<ByteArray>(1)
-
-        override suspend fun receive(): ByteArray {
-            return inbound.receive()
-        }
-
-        override suspend fun send(bytes: ByteArray) {
-            outbound.send(bytes)
-        }
-
-        override suspend fun closeOutbound() {
-            outbound.close()
-        }
-
-        override suspend fun closeInbound() {
-            inbound.close()
-        }
-    }
-
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
-    ) {
-        var globalException: Throwable? = null
-        val context = StreamContext()
-
-        val job = GlobalScope.launch(CoroutineExceptionHandler { _, exception ->
-            globalException = exception
-        }) {
-            context.block()
+    ) = coroutineScope {
+        val inbound = Channel<ByteArray>(64)
+        val ready = CompletableDeferred<Unit>()
+        val queuedBytes = java.util.concurrent.atomic.AtomicLong()
+        val byteLimit = com.latenighthack.ktbuf.ProtobufLimits().maxMessageBytes.toLong()
+        var outboundClosed = false
+        val sending = kotlinx.coroutines.sync.Mutex()
+        var socket: WebSocket? = null
+        val wsUrl = if (isSecure) serverPath.replace("https:", "wss:")
+            else "ws://${serverPath.replace("http://", "")}"
+        val url = if (useApiGateway) method.toApiGatewayPath(wsUrl) else method.toPath(wsUrl)
+        fun error(code: Codes, message: String, cause: Throwable? = null) = RpcResponseException(url, "WS", code, message, cause)
+        fun fail(webSocket: WebSocket, cause: Throwable) {
+            ready.completeExceptionally(cause)
+            inbound.close(cause)
+            webSocket.cancel()
         }
-
-        val requestData = Request.Builder()
-            .get()
-            .url(method.toPath(if (isSecure) {
-                serverPath.replace("https:", "wss:")
-            } else {
-                "ws://${serverPath.replace("http://", "")}"
-            }))
-            .build()
-        val webSocket = client.newWebSocket(requestData, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                super.onOpen(webSocket, response)
-
-                readyCallback()
+        fun finish(code: Int, reason: String) {
+            val status = Status.fromWSCode(code, reason)
+            val cause = if (status.code == Codes.OK) null else error(status.code, status.message)
+            if (!ready.isCompleted) ready.completeExceptionally(cause ?: error(Codes.UNAVAILABLE, "Socket closed before opening"))
+            inbound.close(cause)
+        }
+        val stream = object : RpcServerStream {
+            override suspend fun receive(): ByteArray = inbound.receive().also { queuedBytes.addAndGet(-it.size.toLong()) }
+            override suspend fun send(bytes: ByteArray) {
+                ready.await()
+                sending.lock()
+                try {
+                    check(!outboundClosed) { "Request stream is closed" }
+                    if (bytes.size > byteLimit) throw error(Codes.RESOURCE_EXHAUSTED, "RPC frame exceeds byte limit")
+                    if (!checkNotNull(socket).send(bytes.toByteString())) throw error(Codes.UNAVAILABLE, "WebSocket rejected the outgoing message")
+                } finally { sending.unlock() }
             }
-
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                super.onClosing(webSocket, code, reason)
+            override suspend fun closeOutbound() {
+                sending.lock()
+                try { outboundClosed = true } finally { sending.unlock() }
             }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                super.onFailure(webSocket, t, response)
-
-                val statusCode = when (t) {
-                    is EOFException -> {
-                        try {
-                            context.inbound.close()
-                            context.outbound.close()
-                        } catch (t: Throwable) {
-
-                        }
+            override suspend fun closeInbound() { inbound.close() }
+        }
+        try {
+            socket = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) { ready.complete(Unit) }
+                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    finish(code, reason)
+                    webSocket.close(1000, null)
+                }
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { finish(code, reason) }
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    val status = response?.takeIf { it.code >= 400 }?.let { Status.fromHTTPCode(it.code, it.message) }
+                    fail(webSocket, error(status?.code ?: Codes.UNAVAILABLE, status?.message ?: "WebSocket transport failed", t))
+                    response?.body?.close()
+                }
+                override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                    if (inbound.isClosedForSend) return
+                    val count = bytes.size.toLong()
+                    if (count > byteLimit) { fail(webSocket, error(Codes.RESOURCE_EXHAUSTED, "RPC frame exceeds byte limit")); return }
+                    val reserved = queuedBytes.addAndGet(count)
+                    if (reserved > byteLimit) {
+                        queuedBytes.addAndGet(-count)
+                        fail(webSocket, error(Codes.RESOURCE_EXHAUSTED, "RPC response queue exceeds byte limit"))
                         return
                     }
-                    is ConnectException -> 0
-                    else -> 0
-                }
-
-                // todo: needs testing (this might not be onClosed with error)
-                val status = Status.fromWSCode(statusCode, "")
-                val error = CancellationException("${statusCode}", RpcResponseException(method.toPath(""), "WS", status.code, response?.message ?: "", t))
-
-                context.inbound.cancel(error)
-                context.outbound.cancel(error)
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                super.onClosed(webSocket, code, reason)
-
-                context.inbound.close()
-                context.outbound.close()
-            }
-
-            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                super.onMessage(webSocket, bytes)
-
-                GlobalScope.launch {
-                    if (!context.inbound.isClosedForSend) {
-                        context.inbound.send(bytes.toByteArray())
+                    if (!inbound.trySend(bytes.toByteArray()).isSuccess) {
+                        queuedBytes.addAndGet(-count)
+                        if (!inbound.isClosedForSend) fail(webSocket, error(Codes.RESOURCE_EXHAUSTED, "RPC response queue is full"))
                     }
                 }
-            }
-
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                super.onMessage(webSocket, text)
-
-                GlobalScope.launch {
-                    if (!context.inbound.isClosedForSend) {
-                        context.inbound.send(text.toByteArray())
-                    }
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    fail(webSocket, error(Codes.INVALID_ARGUMENT, "Expected a binary RPC response"))
                 }
-            }
-        })
-
-        while (!context.outbound.isClosedForReceive) {
-            val bytes = context.outbound.receive()
-            webSocket.send(bytes.toByteString())
-        }
-
-        job.join()
-
-        if (globalException != null) {
-            throw globalException!!
+            })
+            ready.await()
+            readyCallback()
+            stream.block()
+        } finally {
+            inbound.cancel()
+            socket?.cancel()
         }
     }
 }
