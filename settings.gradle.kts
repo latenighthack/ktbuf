@@ -20,3 +20,6 @@ include(":server")
 include(":test")
 include(":patch")
 include(":conformance")
+
+// Explicit isolated library development; release builds use published dependencies.
+apply(from = "gradle/fh-workspace.settings.gradle")
