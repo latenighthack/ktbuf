@@ -51,34 +51,27 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
 
             call.enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
-                    if (response.code > 299 || response.code < 200) {
-                        val errorMessage = response.body!!.string()
-                        val status = Status.fromHTTPCode(response.code, errorMessage)
-                        continuation.resumeWithException(RpcResponseException(method.toPath(""), "POST", status.code, status.message, RuntimeException(errorMessage)))
-                    } else {
-                        continuation.resume(RpcResponse(response.body!!.bytes(), response.headers.toMap()))
+                    val result = runCatching {
+                        response.use {
+                            if (response.code > 299 || response.code < 200) {
+                                val errorMessage = response.body!!.string()
+                                val status = Status.fromHTTPCode(response.code, errorMessage)
+                                throw RpcResponseException(method.toPath(""), "POST", status.code, status.message, RuntimeException(errorMessage))
+                            } else {
+                                RpcResponse(response.body!!.bytes(), response.headers.toMap())
+                            }
+                        }
                     }
-
-                    response.closeQuietly()
+                    continuation.completeCallback(result)
                 }
 
                 override fun onFailure(call: Call, e: IOException) {
-                    if (continuation.isCancelled) {
-                        return
-                    }
-
-                    call.cancel()
-
-                    continuation.resumeWithException(e)
+                    continuation.completeCallback(Result.failure(e))
                 }
             })
 
             continuation.invokeOnCancellation {
-                try {
-                    call.cancel()
-                } catch (ex: Throwable) {
-                    // Ignore cancel exception
-                }
+                call.cancel()
             }
         }
     }

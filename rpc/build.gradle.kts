@@ -55,6 +55,10 @@ kotlin {
             }
         }
 
+        val androidUnitTest by getting {
+            kotlin.srcDir("src/jvmTest/kotlin")
+        }
+
         val androidMain by getting {
             dependencies {
                 implementation(libs.okhttp3.okhttp)

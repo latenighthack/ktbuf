@@ -6,10 +6,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.internal.closeQuietly
 import java.io.IOException
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 actual class PlatformHttpClient: HttpClient {
     private val client: OkHttpClient = OkHttpClient()
@@ -46,34 +43,27 @@ actual class PlatformHttpClient: HttpClient {
 
             call.enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
-                    if (response.code > 299 || response.code < 200) {
-                        val errorMessage = response.body!!.string()
-                        val status = Status.fromHTTPCode(response.code, errorMessage)
-                        continuation.resumeWithException(RpcResponseException(url, method, status.code, status.message, RuntimeException(errorMessage)))
-                    } else {
-                        continuation.resume(response.body!!.bytes())
+                    val result = runCatching {
+                        response.use {
+                            if (response.code > 299 || response.code < 200) {
+                                val errorMessage = response.body!!.string()
+                                val status = Status.fromHTTPCode(response.code, errorMessage)
+                                throw RpcResponseException(url, method, status.code, status.message, RuntimeException(errorMessage))
+                            } else {
+                                response.body!!.bytes()
+                            }
+                        }
                     }
-
-                    response.closeQuietly()
+                    continuation.completeCallback(result)
                 }
 
                 override fun onFailure(call: Call, e: IOException) {
-                    if (continuation.isCancelled) {
-                        return
-                    }
-
-                    call.cancel()
-
-                    continuation.resumeWithException(e)
+                    continuation.completeCallback(Result.failure(e))
                 }
             })
 
             continuation.invokeOnCancellation {
-                try {
-                    call.cancel()
-                } catch (ex: Throwable) {
-                    // Ignore cancel exception
-                }
+                call.cancel()
             }
         }
     }
