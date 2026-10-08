@@ -6,6 +6,10 @@ import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
 interface ProtobufReader {
     val currentFieldNumber: Int
 
+    /** Wire type of the last tag. Custom readers must implement this for generated decoders. */
+    val currentWireType: UInt
+        get() = throw UnsupportedOperationException("This reader does not report protobuf wire types")
+
     fun isByteAvailable(): Boolean
 
     fun nextField(): Boolean
@@ -50,7 +54,8 @@ class ScopedProtobufReader(
 ) : ProtobufReader {
     private val tempBuffer = ByteArray(8)
 
-    private var currentFieldType: UInt = 0U
+    override var currentWireType: UInt = 0U
+        private set
 
     override var currentFieldNumber: Int = 0
         get() = field
@@ -68,7 +73,7 @@ class ScopedProtobufReader(
         }
 
         readTag()
-        require(currentFieldType != 4U) { "Unexpected end-group tag" }
+        require(currentWireType != 4U) { "Unexpected end-group tag" }
         return true
     }
 
@@ -78,7 +83,7 @@ class ScopedProtobufReader(
             "Invalid protobuf tag"
         }
         currentFieldNumber = (tag shr 3).toInt()
-        currentFieldType = (tag and 7UL).toUInt()
+        currentWireType = (tag and 7UL).toUInt()
     }
 
     override fun skipField(): ByteArray = skipField(0)
@@ -87,7 +92,7 @@ class ScopedProtobufReader(
         val result = MutableLinkedByteArray(32)
         val writer = ScopedProtobufWriter(result)
 
-        when (currentFieldType) {
+        when (currentWireType) {
             ProtoConstants.WireType.varInt -> {
                 writer.encode(readVarInt(), currentFieldNumber)
             }
@@ -107,11 +112,11 @@ class ScopedProtobufReader(
                 while (true) {
                     require(isByteAvailable()) { "Missing end-group tag" }
                     readTag()
-                    if (currentFieldType == 4U) {
+                    if (currentWireType == 4U) {
                         require(currentFieldNumber == groupNumber) { "Mismatched end-group tag" }
                         writer.encode((groupNumber.toULong() shl 3) or 4UL, null)
                         currentFieldNumber = groupNumber
-                        currentFieldType = 3U
+                        currentWireType = 3U
                         break
                     }
                     writer.encodeRaw(skipField(groupDepth + 1))
