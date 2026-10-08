@@ -3,14 +3,14 @@ package com.latenighthack.ktbuf.rpc
 import com.latenighthack.ktbuf.net.RpcResponseException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.retry
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.retryWhen
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -64,12 +64,65 @@ interface BackoffContext {
 
 fun Long.clamp(lowerBound: Long, upperBound: Long) = max(min(this, upperBound), lowerBound)
 
-private data class BackoffState(
-    val attempts: Int = 0,
-    val progressiveBackoff: Int = 0,
-    val isComplete: Boolean = false
-)
+private class RetrySchedule(
+    private val initial: Long,
+    private val rate: Float,
+    private val jitter: Float,
+    private val minimum: Long,
+    private val maximum: Long,
+    private val externalReset: ReceiveChannel<Unit>? = null
+) : BackoffContext {
+    private val resets = Channel<Unit>(Channel.CONFLATED)
+    private var externalOpen = true
+    private var current = initial.coerceIn(minimum, maximum)
 
+    override fun reset() { resets.trySend(Unit) }
+    fun close() { resets.close() }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun waitForRetry() {
+        val wait = (current.toDouble() * (1.0 + Random.nextDouble() * jitter))
+            .coerceIn(minimum.toDouble(), maximum.toDouble()).toLong()
+        while (true) {
+            val event = select<Int> {
+                resets.onReceive { 1 }
+                if (externalReset != null && externalOpen) externalReset.onReceiveCatching {
+                    if (it.isSuccess) 1 else { externalOpen = false; -1 }
+                }
+                onTimeout(wait) { 0 }
+            }
+            if (event == -1) continue
+            current = if (event == 1) initial.coerceIn(minimum, maximum)
+                else (current.toDouble() * rate).coerceAtMost(maximum.toDouble()).toLong()
+            return
+        }
+    }
+}
+
+private fun validateBackoff(backoff: Long, rate: Float, jitter: Float, minimum: Long, maximum: Long, timeLimit: Long, retryLimit: Int) {
+    require(backoff >= 0 && minimum >= 0 && maximum >= minimum) { "Invalid backoff interval" }
+    require(rate.isFinite() && rate >= 1f) { "Backoff rate must be finite and at least one" }
+    require(jitter.isFinite() && jitter in 0f..1f) { "Jitter must be between zero and one" }
+    require(timeLimit >= 0 && retryLimit >= 0) { "Retry and time limits must be nonnegative" }
+}
+
+private fun checkRetriable(cause: Throwable, handler: (Throwable) -> Boolean) {
+    if (cause is CancellationException) throw cause
+    if (cause is Backoff.PermanentError) throw (cause.cause ?: cause)
+    if (cause is Backoff.RetriableError) {
+        if (cause.cause is CancellationException) throw cause.cause!!
+        return
+    }
+    if (cause is Backoff.ForceRetry) return
+    if (cause is Error || !handler(cause)) throw cause
+}
+
+private suspend fun <T> withinDeadline(timeLimit: Long, block: suspend () -> T): T =
+    if (timeLimit == Long.MAX_VALUE) block() else withTimeout(timeLimit) { block() }
+
+/** Retry limits count retries after the initial collection. State is per collection.
+ * [task] is the legacy recovery hook, invoked before each retry; its result is ignored.
+ */
 fun <T> Flow<T>.retryWithBackoff(
     backoff: Long = BackoffContext.DEFAULT_BACKOFF,
     backoffRate: Float = BackoffContext.DEFAULT_BACKOFF_RATE,
@@ -80,56 +133,29 @@ fun <T> Flow<T>.retryWithBackoff(
     retryLimit: Int = BackoffContext.DEFAULT_RETRY_LIMIT,
     task: suspend BackoffContext.(Int) -> T?
 ): Flow<T> {
-    var isFirst = true
-    val internalResetChannel = Channel<Unit>(1)
-
-    val state = AtomicReference<BackoffState>(BackoffState(progressiveBackoff = backoff.toInt()))
-
-    val context = object : BackoffContext {
-        override fun reset() {
-            internalResetChannel.trySend(Unit)
-        }
-    }
-
-    return this.retry { cause ->
-        if (state.value.attempts > retryLimit) {
-            false
-        } else {
-            if (isFirst) {
-                isFirst = false
-
-                context.task(state.value.attempts).also {
-                    state.getAndUpdate {
-                        copy(isComplete = true)
+    validateBackoff(backoff, backoffRate, jitter, minRetryTime, maxRetryTime, timeLimit, retryLimit)
+    return flow {
+        val schedule = RetrySchedule(backoff, backoffRate, jitter, minRetryTime, maxRetryTime)
+        try {
+            withinDeadline(timeLimit) {
+                this@retryWithBackoff.retryWhen { cause, attempt ->
+                    checkRetriable(cause, BackoffContext.DEFAULT_EXCEPTION_HANDLER)
+                    if (attempt >= retryLimit) false else {
+                        schedule.task((attempt + 1).toInt())
+                        schedule.waitForRetry()
+                        true
                     }
-                }
-            }
+                }.collect { emit(it) }
 
-            state.getAndUpdate {
-                copy(progressiveBackoff = min((progressiveBackoff * backoffRate).toInt(), maxRetryTime.toInt()))
             }
-        }
-
-        true
+        } finally { schedule.close() }
     }
 }
 
-/**
- * @param backoff
- * @param backoffRate
- * @param jitter
- * @param minRetryTime
- * @param maxRetryTime
- * @param timeLimit
- * @param retryLimit
- * @param task
- *
- * @return The value returned by the task provided a value is returned within the limits of the backoff
- * @throws RetryLimitExceeded if the total retries exceed the allowed limit
- *         TimeLimitExceeded if the total backoff period is exceeded
- *         Any exception thrown by the task which is not wrapped as retriable will be rethrown
+/** Runs an initial attempt numbered zero, followed by at most [retryLimit] retries.
+ * [timeLimit] bounds the whole operation, including tasks and waits. A null result
+ * is successful completion. Cancellation and permanent errors propagate unchanged.
  */
-@OptIn(InternalCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 suspend fun <T: Any> repeatWithBackoff(
     backoff: Long = BackoffContext.DEFAULT_BACKOFF,
     backoffRate: Float = BackoffContext.DEFAULT_BACKOFF_RATE,
@@ -142,85 +168,20 @@ suspend fun <T: Any> repeatWithBackoff(
     exceptionHandler: (Throwable) -> Boolean = BackoffContext.DEFAULT_EXCEPTION_HANDLER,
     task: suspend BackoffContext.(Int) -> T?
 ): T? {
-    var isFirst = true
-    val internalResetChannel = Channel<Unit>(1)
-
-    val state = AtomicReference<BackoffState>(BackoffState(progressiveBackoff = backoff.toInt()))
-
-    val context = object : BackoffContext {
-        override fun reset() {
-            internalResetChannel.trySend(Unit)
-        }
-    }
-
-    var result: T? = null
-
-    while ((state.getAndUpdate {
-        copy(attempts = attempts + 1)
-    }).attempts < retryLimit) {
-        try {
-            result = if (isFirst) {
-                isFirst = false
-
-                context.task(state.value.attempts).also {
-                    state.getAndUpdate {
-                        copy(isComplete = true)
-                    }
-                }
-            } else {
-                select {
-                    resetChannel.onReceiveCatching {
-                        throw Backoff.PermanentError(CancellationException("Operation cancelled"))
-                    }
-
-                    internalResetChannel.onReceiveCatching {
-                        context.task(state.value.attempts).also {
-                            state.getAndUpdate {
-                                copy(isComplete = true)
-                            }
-                        }
-                    }
-
-                    // compute backoff time
-                    val currentBackoff = state.value.progressiveBackoff
-                    val currentJitter = (Random.nextFloat() * jitter * currentBackoff).toLong()
-                    val clampedBackoff = (currentBackoff + currentJitter).clamp(minRetryTime, maxRetryTime)
-                    val timeoutClampedBackoff = min(clampedBackoff, timeLimit)
-
-                    onTimeout(timeoutClampedBackoff) {
-                        context.task(state.value.attempts).also {
-                            state.getAndUpdate {
-                                copy(isComplete = true)
-                            }
-                        }
-                    }
-                }
+    validateBackoff(backoff, backoffRate, jitter, minRetryTime, maxRetryTime, timeLimit, retryLimit)
+    val schedule = RetrySchedule(backoff, backoffRate, jitter, minRetryTime, maxRetryTime, resetChannel)
+    try {
+        return withinDeadline(timeLimit) {
+            var attempt = 0
+            while (true) {
+                try { return@withinDeadline schedule.task(attempt) }
+                catch (cause: Throwable) { checkRetriable(cause, exceptionHandler) }
+                if (attempt >= retryLimit) throw RetryLimitExceeded()
+                attempt++
+                schedule.waitForRetry()
             }
-
-            break
-        } catch (e: Backoff.PermanentError) {
-            throw e.cause!!
-        } catch (e: Backoff.RetriableError) {
-        } catch (e: Backoff.ForceRetry) {
-        } catch (e: ClosedSendChannelException) {
-            break
-        } catch (e: Throwable) {
-            val isRetriable = exceptionHandler(e)
-            if (!isRetriable) {
-                throw e
-            }
+            @Suppress("UNREACHABLE_CODE")
+            null
         }
-
-        state.getAndUpdate {
-            copy(progressiveBackoff = min((progressiveBackoff * backoffRate).toInt(), maxRetryTime.toInt()))
-        }
-    }
-
-    if (state.value.attempts >= retryLimit) {
-        throw RetryLimitExceeded()
-    } else if (!state.value.isComplete) {
-        throw IllegalStateException("Did not complete")
-    }
-
-    return result
+    } finally { schedule.close() }
 }
