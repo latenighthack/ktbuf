@@ -18,7 +18,7 @@ suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {
             config()
         }
     ) {
-        install(WebSockets)
+        install(WebSockets) { maxFrameSize = com.latenighthack.ktbuf.ProtobufLimits().maxMessageBytes.toLong() }
 
         job = launch {
             extensions()

@@ -1,6 +1,11 @@
 package com.latenighthack.ktbuf.server
 
 import com.latenighthack.ktbuf.ProtobufInputStream
+import com.latenighthack.ktbuf.ProtobufLimits
+import com.latenighthack.ktbuf.ProtobufLimitException
+import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
+import com.latenighthack.ktbuf.proto.Codes
+import io.ktor.utils.io.*
 import com.latenighthack.ktbuf.ProtobufOutputStream
 import com.latenighthack.ktbuf.net.*
 import com.latenighthack.ktbuf.proto.toHttpCode
@@ -32,16 +37,23 @@ public fun <Server: Any> Routing.serveAll(
     server: Server,
     descriptor: ServerDescriptor,
     contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
+) = serveAll(server, descriptor, ProtobufLimits(), contextProcessor)
+
+public fun <Server: Any> Routing.serveAll(
+    server: Server,
+    descriptor: ServerDescriptor,
+    limits: ProtobufLimits,
+    contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
 ) {
     for (method in descriptor.methods) {
         if (method.streamingIn && method.streamingOut) {
-            serveStreamingInOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
+            serveStreamingInOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, limits, contextProcessor)
         } else if (method.streamingIn) {
-            serveStreamingInOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
+            serveStreamingInOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, limits, contextProcessor)
         } else if (method.streamingOut) {
-            serveStreamingOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
+            serveStreamingOut<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, limits, contextProcessor)
         } else {
-            serveUnary<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, contextProcessor)
+            serveUnary<Server>(server, descriptor, method as ServerMethodDescriptor<Any, Any, Server>, limits, contextProcessor)
         }
     }
 }
@@ -51,13 +63,21 @@ public fun <Server: Any> Routing.serveUnary(
     descriptor: ServerDescriptor,
     methodDescriptor: ServerMethodDescriptor<Any, Any, Server>,
     contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
+) = serveUnary(server, descriptor, methodDescriptor, ProtobufLimits(), contextProcessor)
+
+public fun <Server: Any> Routing.serveUnary(
+    server: Server,
+    descriptor: ServerDescriptor,
+    methodDescriptor: ServerMethodDescriptor<Any, Any, Server>,
+    limits: ProtobufLimits,
+    contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
 ) {
     val path = "/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}"
     post(path) {
         try {
             val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
-            val stream = ProtobufInputStream()
-            stream.addBytes(call.receive<ByteArray>())
+            val stream = ProtobufInputStream(limits = limits)
+            stream.addBytes(call.readBoundedBody(limits.maxMessageBytes))
             val request = stream.read(methodDescriptor.requestParser)
             val handler = methodDescriptor.handler as ServerMethod.Unary
 
@@ -71,6 +91,8 @@ public fun <Server: Any> Routing.serveUnary(
             val outgoingBytes = outStream.toByteArray()
 
             call.respond(outgoingBytes)
+        } catch (limit: ProtobufLimitException) {
+            call.respondText("Request exceeds decoding limits", status = HttpStatusCode.TooManyRequests)
         } catch (rpcException: RpcResponseException) {
             call.respondText(
                 rpcException.errorMessage,
@@ -89,11 +111,20 @@ public fun <Server: Any> Routing.serveStreamingOut(
     descriptor: ServerDescriptor,
     methodDescriptor: ServerMethodDescriptor<Any, Any, Server>,
     contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
+) = serveStreamingOut(server, descriptor, methodDescriptor, ProtobufLimits(), contextProcessor)
+
+public fun <Server: Any> Routing.serveStreamingOut(
+    server: Server,
+    descriptor: ServerDescriptor,
+    methodDescriptor: ServerMethodDescriptor<Any, Any, Server>,
+    limits: ProtobufLimits,
+    contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
 ) {
     webSocket("/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}") {
+        maxFrameSize = limits.maxMessageBytes.toLong()
         try {
             val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
-            val stream = ProtobufInputStream()
+            val stream = ProtobufInputStream(limits = limits)
             val frame = incoming.receive()
             stream.addBytes(frame.readBytes())
             val request = stream.read(methodDescriptor.requestParser)
@@ -125,6 +156,8 @@ public fun <Server: Any> Routing.serveStreamingOut(
                         }
                     }
                 }
+        } catch (limit: ProtobufLimitException) {
+            close(reason = CloseReason(4008.toShort(), "Request exceeds decoding limits"))
         } catch (rpcException: RpcResponseException) {
             close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))
         } catch (t: Throwable) {
@@ -139,8 +172,17 @@ public fun <Server: Any> Routing.serveStreamingInOut(
     descriptor: ServerDescriptor,
     methodDescriptor: ServerMethodDescriptor<Any, Any, Server>,
     contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
+) = serveStreamingInOut(server, descriptor, methodDescriptor, ProtobufLimits(), contextProcessor)
+
+public fun <Server: Any> Routing.serveStreamingInOut(
+    server: Server,
+    descriptor: ServerDescriptor,
+    methodDescriptor: ServerMethodDescriptor<Any, Any, Server>,
+    limits: ProtobufLimits,
+    contextProcessor: (GrpcRequestContext) -> GrpcRequestContext = { it }
 ) {
     webSocket("/api/${descriptor.packageName}.${descriptor.serviceName}/${methodDescriptor.methodName}") {
+        maxFrameSize = limits.maxMessageBytes.toLong()
         try {
             val context = contextProcessor(call.toGrpcRequestContext(descriptor, methodDescriptor))
             val handler = (methodDescriptor.handler as ServerMethod.ClientServerStreaming).handler
@@ -149,7 +191,7 @@ public fun <Server: Any> Routing.serveStreamingInOut(
             whileSelect {
                 incoming.onReceiveCatching {
                     if (it.isSuccess) {
-                        val stream = ProtobufInputStream()
+                        val stream = ProtobufInputStream(limits = limits)
                         val frame = it.getOrNull()!!
 
                         stream.addBytes(frame.readBytes())
@@ -196,10 +238,25 @@ public fun <Server: Any> Routing.serveStreamingInOut(
                         }
                     }
                 }
+        } catch (limit: ProtobufLimitException) {
+            close(reason = CloseReason(4008.toShort(), "Request exceeds decoding limits"))
         } catch (rpcException: RpcResponseException) {
             close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, rpcException.errorMessage))
         } catch (t: Throwable) {
             close(reason = CloseReason(CloseReason.Codes.INTERNAL_ERROR, ""))
         }
     }
+}
+
+private suspend fun ApplicationCall.readBoundedBody(limit: Int): ByteArray {
+    val channel = receiveChannel()
+    val bytes = MutableLinkedByteArray(minOf(8192, limit))
+    val chunk = ByteArray(8192)
+    while (true) {
+        val count = channel.readAvailable(chunk)
+        if (count < 0) break
+        if (count > limit - bytes.size) throw RpcResponseException("", "POST", Codes.RESOURCE_EXHAUSTED, "Request exceeds byte limit")
+        bytes.write(chunk, length = count)
+    }
+    return bytes.toByteArray()
 }

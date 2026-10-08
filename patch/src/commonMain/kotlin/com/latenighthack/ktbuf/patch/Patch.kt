@@ -287,7 +287,7 @@ fun ByteArray.applyChange(change: Change): ByteArray {
         is Change.InsertDistinct -> change.path
         is Change.RemoveDistinct -> change.path
     }
-    require(path.components.isNotEmpty() && path.components.size <= 100) { "Invalid patch path depth" }
+    require(path.components.isNotEmpty() && path.components.size <= com.latenighthack.ktbuf.ProtobufLimits().maxDepth) { "Invalid patch path depth" }
     require(path.components.all { it.fieldNumber in 1..536870911 && it.index >= 0 }) { "Invalid patch path component" }
     val inputStream = ProtobufInputStream(size)
 

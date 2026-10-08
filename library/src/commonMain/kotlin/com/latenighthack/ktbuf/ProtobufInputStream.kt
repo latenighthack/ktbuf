@@ -3,12 +3,35 @@ package com.latenighthack.ktbuf
 import com.latenighthack.ktbuf.bytes.LinkedByteArray
 import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
 
+/** Limits are shared by every child reader of a message. */
+data class ProtobufLimits(
+    val maxMessageBytes: Int = 16 * 1024 * 1024,
+    val maxDepth: Int = 64,
+    val maxWork: Long = 1_000_000
+) {
+    init { require(maxMessageBytes >= 0 && maxDepth >= 0 && maxWork > 0) { "Invalid protobuf limits" } }
+}
+
+class ProtobufLimitException(message: String) : IllegalArgumentException(message)
+
+private class ReadBudget(val limits: ProtobufLimits) {
+    private var remaining = limits.maxWork
+    fun account(units: Long) {
+        require(units >= 0) { "Negative decoding work" }
+        if (units > remaining) throw ProtobufLimitException("Protobuf decoding work limit exceeded")
+        remaining -= units
+    }
+}
+
 interface ProtobufReader {
     val currentFieldNumber: Int
 
     /** Wire type of the last tag. Custom readers must implement this for generated decoders. */
     val currentWireType: UInt
         get() = throw UnsupportedOperationException("This reader does not report protobuf wire types")
+
+    /** Accounts additional copying work performed by generated message merges. */
+    fun accountWork(units: Long) { require(units >= 0) }
 
     fun isByteAvailable(): Boolean
 
@@ -49,9 +72,16 @@ interface ProtobufReader {
     fun <T> readField(builder: (ProtobufReader) -> T): T
 }
 
-class ScopedProtobufReader(
-    private val input: LinkedByteArray
+class ScopedProtobufReader private constructor(
+    private val input: LinkedByteArray,
+    private val budget: ReadBudget,
+    private val depth: Int
 ) : ProtobufReader {
+    constructor(input: LinkedByteArray, limits: ProtobufLimits = ProtobufLimits()) : this(input, ReadBudget(limits), 0) {
+        if (input.size > limits.maxMessageBytes) throw ProtobufLimitException("Protobuf message byte limit exceeded")
+    }
+    override fun accountWork(units: Long) = budget.account(units)
+
     private val tempBuffer = ByteArray(8)
 
     override var currentWireType: UInt = 0U
@@ -86,12 +116,13 @@ class ScopedProtobufReader(
         currentWireType = (tag and 7UL).toUInt()
     }
 
-    override fun skipField(): ByteArray = skipField(0)
-
-    private fun skipField(groupDepth: Int): ByteArray {
+    override fun skipField(): ByteArray {
         val result = MutableLinkedByteArray(32)
-        val writer = ScopedProtobufWriter(result)
+        skipFieldInto(ScopedProtobufWriter(result), 0)
+        return result.toByteArray()
+    }
 
+    private fun skipFieldInto(writer: ProtobufWriter, groupDepth: Int) {
         when (currentWireType) {
             ProtoConstants.WireType.varInt -> {
                 writer.encode(readVarInt(), currentFieldNumber)
@@ -106,7 +137,7 @@ class ScopedProtobufReader(
                 writer.encode(readBytes(), currentFieldNumber)
             }
             3U -> {
-                require(groupDepth < 100) { "Group nesting limit exceeded" }
+                if (depth + groupDepth >= budget.limits.maxDepth) throw ProtobufLimitException("Group nesting limit exceeded")
                 val groupNumber = currentFieldNumber
                 writer.encode((groupNumber.toULong() shl 3) or 3UL, null)
                 while (true) {
@@ -119,13 +150,12 @@ class ScopedProtobufReader(
                         currentWireType = 3U
                         break
                     }
-                    writer.encodeRaw(skipField(groupDepth + 1))
+                    skipFieldInto(writer, groupDepth + 1)
                 }
             }
             else -> error("Unexpected end-group tag")
         }
 
-        return result.toByteArray()
     }
 
     override fun readFloat(): Float = Float.fromBits(readFixedInt32().toInt())
@@ -159,6 +189,7 @@ class ScopedProtobufReader(
     override fun readUInt64(): ULong = readVarInt()
 
     override fun readFixedInt32(): UInt {
+        accountWork(1)
         input.readAdvance(tempBuffer, length = 4)
 
         return (tempBuffer[0].toUByte().toUInt() shl 0) or
@@ -168,6 +199,7 @@ class ScopedProtobufReader(
     }
 
     override fun readFixedInt64(): ULong {
+        accountWork(1)
         input.readAdvance(tempBuffer, length = 8)
 
         return (tempBuffer[0].toUByte().toULong() shl 0) or
@@ -185,9 +217,10 @@ class ScopedProtobufReader(
     override fun readSFixedInt64(): Long = readFixedInt64().toLong()
 
     override fun <T> readField(builder: (ProtobufReader) -> T): T {
+        if (depth >= budget.limits.maxDepth) throw ProtobufLimitException("Message nesting limit exceeded")
         val expectedLength = readLength()
 
-        return builder(ScopedProtobufReader(input.subarray(0, expectedLength))).also {
+        return builder(ScopedProtobufReader(input.subarray(0, expectedLength), budget, depth + 1)).also {
             input.advance(expectedLength)
         }
     }
@@ -222,6 +255,7 @@ class ScopedProtobufReader(
     }
 
     private fun readVarInt(): ULong {
+        accountWork(1)
         var result = 0UL
         for (index in 0 until 10) {
             val byte = nextByte().toUByte().toUInt()
@@ -234,15 +268,30 @@ class ScopedProtobufReader(
 
 }
 
-class ProtobufInputStream(bufferSize: Int = 2024) {
-    private val input = MutableLinkedByteArray(bufferSize)
-    private val reader = ScopedProtobufReader(input)
+class ProtobufInputStream(
+    private val bufferSize: Int = 2024,
+    private val limits: ProtobufLimits = ProtobufLimits()
+) {
+    private val input = MutableLinkedByteArray(minOf(bufferSize, limits.maxMessageBytes))
+    private var consumed = 0
 
     fun addBytes(bytes: ByteArray) {
+        if (bytes.size > limits.maxMessageBytes - input.size) throw ProtobufLimitException("Protobuf message byte limit exceeded")
+        if (consumed > 0 && consumed >= maxOf(input.size, minOf(bufferSize, limits.maxMessageBytes))) {
+            val unread = input.toByteArray()
+            input.clear()
+            input.write(unread)
+            consumed = 0
+        }
         input.insert(bytes)
     }
 
     fun <T> read(builder: (ProtobufReader) -> T): T {
-        return builder(reader)
+        val before = input.size
+        try { return builder(ScopedProtobufReader(input, limits)) }
+        finally {
+            consumed += before - input.size
+            if (input.size == 0) { input.clear(); consumed = 0 }
+        }
     }
 }
