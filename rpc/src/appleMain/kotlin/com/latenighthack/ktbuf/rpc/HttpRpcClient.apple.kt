@@ -23,42 +23,39 @@ class MainQueueDispatcher: CoroutineDispatcher(), Delay {
 
     @OptIn(InternalCoroutinesApi::class, ExperimentalCoroutinesApi::class)
     override fun scheduleResumeAfterDelay(timeMillis: Long, continuation: CancellableContinuation<Unit>) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, timeMillis * 1_000_000), dispatch_get_main_queue()) {
-            try {
-                with(continuation) {
-                    resumeUndispatched(Unit)
-                }
-            } catch (err: Throwable) {
-                throw err
-            }
-        }
+        val handle = invokeOnTimeout(timeMillis, Runnable {
+            if (continuation.isActive) continuation.resume(Unit)
+        }, continuation.context)
+        continuation.invokeOnCancellation { handle.dispose() }
     }
 
-    @OptIn(InternalCoroutinesApi::class)
+    @OptIn(ExperimentalForeignApi::class)
     override fun invokeOnTimeout(timeMillis: Long, block: Runnable, context: CoroutineContext): DisposableHandle {
-        NSLog("invokeOnTimeout %d", timeMillis)
-        val handle = object : DisposableHandle {
-            var disposed = false
-                private set
-
-            override fun dispose() {
-//                disposed = true
-            }
-        }
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, timeMillis * 1_000_000L), dispatch_get_main_queue()) {
-            try {
-                if (!handle.disposed) {
-                    context.run {
-                        block.run()
-                    }
+        val active = AtomicReference(true)
+        // Timer creation and invalidation are confined to the main queue.
+        var timer: NSTimer? = null
+        dispatch_async(dispatch_get_main_queue()) {
+            if (active.value) {
+                val scheduled = NSTimer.timerWithTimeInterval(timerIntervalSeconds(timeMillis), false) {
+                    timer = null
+                    if (active.compareAndSet(true, false)) block.run()
                 }
-            } catch (err: Throwable) {
-                throw err
+                timer = scheduled
+                NSRunLoop.mainRunLoop.addTimer(scheduled, NSRunLoopCommonModes)
+                if (!active.value) { scheduled.invalidate(); timer = null }
             }
         }
-
-        return handle
+        return object : DisposableHandle {
+            override fun dispose() {
+                active.value = false
+                dispatch_async(dispatch_get_main_queue()) {
+                    timer?.invalidate()
+                    timer = null
+                }
+            }
+        }
     }
+
 }
 
 private val mainDispatcher = MainQueueDispatcher()
@@ -226,3 +223,5 @@ internal fun checkedNativeByteCount(length: ULong): Int {
     require(length <= Int.MAX_VALUE.toULong()) { "Native byte data exceeds the Kotlin array size limit" }
     return length.toInt()
 }
+
+internal fun timerIntervalSeconds(timeMillis: Long): Double = timeMillis.coerceAtLeast(0).toDouble() / 1000.0
