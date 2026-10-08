@@ -68,10 +68,6 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
 
                         bytes
                     } catch (ex: ClosedReceiveChannelException) {
-                        if (ex.cause != null) {
-                            this@channelFlow.cancel(ex.cause!!.toString(), ex.cause!!)
-                        }
-
                         return@serverStreamingCall
                     }
 
