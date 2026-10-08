@@ -32,6 +32,8 @@ abstract class TypedUnaryHandler<T, U>(
     private val requestParser: suspend (ByteArray) -> T,
     private val responseSerializer: (U) -> ByteArray,
 ) : UnaryHandler {
+    protected open fun matches(method: RpcMethodSpecifier): Boolean = true
+
     abstract suspend fun handleTypedRequest(
         method: RpcMethodSpecifier,
         headers: Map<String, String>,
@@ -43,12 +45,10 @@ abstract class TypedUnaryHandler<T, U>(
         headers: Map<String, String>,
         request: ByteArray
     ): UnaryHandlerResponse<ByteArray>? {
-        return handleTypedRequest(method, headers, requestParser(request))
-            ?.let { result ->
-                result.response?.let { response ->
-                    UnaryHandlerResponse(responseSerializer(response), result.error, result.discardHandler)
-                }
-            }
+        if (!matches(method)) return null
+        return handleTypedRequest(method, headers, requestParser(request))?.let { result ->
+            UnaryHandlerResponse(result.response?.let(responseSerializer), result.error, result.discardHandler)
+        }
     }
 }
 
@@ -57,6 +57,9 @@ abstract class MatchingTypedUnaryHandler<T, U>(
     private val requestParser: suspend (ByteArray) -> T,
     private val responseSerializer: (U) -> ByteArray,
 ) : TypedUnaryHandler<T, U>(requestParser, responseSerializer) {
+    override fun matches(method: RpcMethodSpecifier): Boolean =
+        matchingMethod.copy(additionalParameters = emptyMap()) == method.copy(additionalParameters = emptyMap())
+
     abstract suspend fun handleTypedRequest(
         headers: Map<String, String>,
         request: T
@@ -67,7 +70,7 @@ abstract class MatchingTypedUnaryHandler<T, U>(
         headers: Map<String, String>,
         request: T
     ): UnaryHandlerResponse<U>? {
-        return if (matchingMethod.toPath("") == method.toPath("")) {
+        return if (matches(method)) {
             handleTypedRequest(headers, request)
         } else {
             null
@@ -85,6 +88,7 @@ class StubRpcClient : RpcClient {
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     ) {
+        throw RpcResponseException(method.toPath(""), "WS", Codes.UNIMPLEMENTED, "Streaming stubs are not supported")
     }
 
     override suspend fun unaryCall(

@@ -4,6 +4,8 @@ import com.latenighthack.ktbuf.server.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.runTest
 
@@ -20,13 +22,12 @@ fun <T> runTestWithServer(
     val server = TestServer()
     var context: T? = null
 
-    server.start({
-        context = extensions()
-    })
-
-    runner(server, context)
-
-    server.stop()
+    try {
+        server.start({ context = extensions() })
+        runner(server, context)
+    } finally {
+        withContext(NonCancellable) { server.stop() }
+    }
 }
 
 /**

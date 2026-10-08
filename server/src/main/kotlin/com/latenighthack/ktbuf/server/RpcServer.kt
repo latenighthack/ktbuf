@@ -10,7 +10,7 @@ import io.ktor.util.logging.*
 import kotlinx.coroutines.*
 
 suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {}, extensions: suspend Application.() -> Unit = {}): EmbeddedServer<*, *> {
-    lateinit var job: Job
+    val setup = CompletableDeferred<Unit>()
     val server = embeddedServer(
         CIO,
         environment = applicationEnvironment { log = KtorSimpleLogger("server") },
@@ -20,9 +20,10 @@ suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {
     ) {
         install(WebSockets) { maxFrameSize = com.latenighthack.ktbuf.ProtobufLimits().maxMessageBytes.toLong() }
 
-        job = launch {
-            extensions()
-        }
+        launch {
+            try { extensions(); setup.complete(Unit) }
+            catch (cause: Throwable) { setup.completeExceptionally(cause) }
+        }.invokeOnCompletion { cause -> if (cause != null) setup.completeExceptionally(cause) }
     }
 
     val ready = CompletableDeferred<Boolean>()
@@ -34,12 +35,15 @@ suspend fun defaultServer(config: ApplicationEngine.Configuration.() -> Unit = {
         ready.completeExceptionally(IllegalStateException("Stopping"))
     }
 
-    server.start()
-
-    ready.await()
-    job.join()
-
-    return server
+    try {
+        server.start()
+        ready.await()
+        setup.await()
+        return server
+    } catch (cause: Throwable) {
+        withContext(NonCancellable) { runCatching { server.stop() } }
+        throw cause
+    }
 }
 
 public suspend fun runServer(extensions: Application.() -> Unit) {
