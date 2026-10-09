@@ -263,6 +263,7 @@ open class ScopedProtobufWriter(private val output: MutableLinkedByteArray) : Pr
     }
 
     private fun fieldTag(fieldNumber: Int, wireType: UInt): ULong {
+        require(fieldNumber in 1..536870911) { "Protobuf field number is outside the valid range: $fieldNumber" }
         return fieldNumber.toULong() shl ProtoConstants.Flags.TagTypeBitCount or wireType.toULong()
     }
 
