@@ -21,3 +21,6 @@ include(":test")
 include(":patch")
 include(":conformance")
 include(":android-consumer")
+
+// Explicit isolated library development; release builds use published dependencies.
+apply(from = "gradle/fh-workspace.settings.gradle")

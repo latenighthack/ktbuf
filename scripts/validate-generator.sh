@@ -4,7 +4,7 @@ runtime_root="$(cd "$(dirname "$0")/.." && pwd)"
 generator_root="$(cd "${1:?Usage: validate-generator.sh GENERATOR_CHECKOUT}" && pwd)"
 # An old generator must not turn a filtered run or skipped consumers into success.
 for regression in TestMapFieldsRoundTripDefaultsDuplicatesAndBuilders TestInvalidJavaPackageIsRejectedBeforeAnyOutput TestWireServiceNamesRetainTheProtoIdentifier TestClientStreamingUnaryServiceCompilesAndCollectsFiniteRequests; do
-  if ! rg -q "func ${regression}" "$generator_root/main_test.go"; then
+  if ! grep -Fq "func ${regression}" "$generator_root/main_test.go"; then
     echo "Required generator regression is missing: $regression" >&2
     exit 1
   fi
