@@ -11,71 +11,10 @@ plugins {
 // commonMain. model.proto and its generated message + editor code are test
 // fixtures and therefore live in commonTest.
 //
-// Codegen is driven by protoc directly rather than through the protobuf Gradle
-// plugin: that plugin's output layout is tied to Android build variants (the old
-// "/proto/debug" path check), which does not map onto generated sources that have
-// to feed every Kotlin target from a common source set. This also drops the
-// dependency on the retired `protoc-gen-kt-patch` plugin — the editor DSL it used
-// to emit is now hand-written in commonTest.
-val protoSourceDir = layout.projectDirectory.dir("src/commonTest/proto")
-val protoOutputDir = layout.buildDirectory.dir("generated/proto/kotlin")
-
-val generateProtoKotlin = tasks.register("generateProtoKotlin") {
-    description = "Generates Kotlin sources from src/commonTest/proto using protoc-gen-kt."
-    group = "build"
-
-    val inputDir = protoSourceDir.asFile
-    val outputDir = protoOutputDir
-
-    inputs.dir(inputDir).withPropertyName("protoSources")
-    outputs.dir(outputDir).withPropertyName("generatedSources")
-
-    doLast {
-        val target = outputDir.get().asFile
-
-        target.deleteRecursively()
-        target.mkdirs()
-
-        val protoFiles = inputDir.walkTopDown()
-            .filter { it.isFile && it.extension == "proto" }
-            .map { it.absolutePath }
-            .toList()
-
-        require(protoFiles.isNotEmpty()) { "no .proto files found in $inputDir" }
-
-        // protoc discovers the `kt` plugin by looking for `protoc-gen-kt` on PATH.
-        val result = providers.exec {
-            commandLine(
-                buildList {
-                    add("protoc")
-                    add("--kt_out=${target.absolutePath}")
-                    add("-I")
-                    add(inputDir.absolutePath)
-                    addAll(protoFiles)
-                }
-            )
-            isIgnoreExitValue = true
-        }
-
-        val exitCode = result.result.get().exitValue
-
-        if (exitCode != 0) {
-            val stderr = result.standardError.asText.get().trim()
-
-            throw GradleException(
-                buildString {
-                    appendLine("protoc failed with exit code $exitCode.")
-                    if (stderr.isNotEmpty()) appendLine(stderr)
-                    appendLine()
-                    appendLine("This module needs both `protoc` and the `protoc-gen-kt` plugin on PATH:")
-                    appendLine("  brew install protobuf")
-                    appendLine("  go install latenighthack.com/protoc-gen-kt@latest")
-                    append("  export PATH=\"\$(go env GOPATH)/bin:\$PATH\"")
-                }
-            )
-        }
-    }
-}
+// Shared generation tracks both executable contents and imported schemas.
+extra["protobufSourceDir"] = "src/commonTest/proto"
+apply(from = rootProject.file("gradle/protobuf-codegen.gradle"))
+val generateProtoKotlin = tasks.named("generateProtoKotlin")
 
 kotlin {
     jvm {

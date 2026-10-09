@@ -1,0 +1,108 @@
+import org.gradle.api.tasks.*
+import org.gradle.api.file.*
+import org.gradle.api.provider.*
+import org.gradle.process.ExecOperations
+import javax.inject.Inject
+import java.nio.file.Files
+import java.security.MessageDigest
+
+@CacheableTask
+abstract class GenerateKotlinProtos extends DefaultTask {
+    @InputDirectory @PathSensitive(PathSensitivity.RELATIVE)
+    abstract DirectoryProperty getSourceDirectory()
+    @InputFiles @PathSensitive(PathSensitivity.RELATIVE)
+    abstract ConfigurableFileCollection getImportedSchemas()
+    @InputFile @PathSensitive(PathSensitivity.NONE)
+    abstract RegularFileProperty getProtocExecutable()
+    @InputFile @PathSensitive(PathSensitivity.NONE)
+    abstract RegularFileProperty getGeneratorExecutable()
+    @Input abstract ListProperty<String> getIncludeDirectories()
+    @Input abstract Property<String> getExpectedProtocVersion()
+    @Input abstract Property<String> getExpectedGeneratorVersion()
+    @Input abstract Property<Boolean> getCustomProtoc()
+    @Input abstract Property<Boolean> getCustomGenerator()
+    @OutputDirectory abstract DirectoryProperty getGeneratedDirectory()
+    @Inject abstract ExecOperations getExecOperations()
+
+    private String capture(List<String> arguments) {
+        def bytes = new ByteArrayOutputStream()
+        def errors = new ByteArrayOutputStream()
+        def result = execOperations.exec {
+            commandLine(arguments)
+            standardOutput = bytes
+            errorOutput = errors
+            ignoreExitValue = true
+        }
+        if (result.exitValue != 0) throw new GradleException("Tool check failed: ${arguments.first()}\n${errors.toString('UTF-8')}")
+        bytes.toString('UTF-8').trim()
+    }
+    private static String sha256(File file) {
+        MessageDigest.getInstance('SHA-256').digest(file.bytes).encodeHex().toString()
+    }
+    @TaskAction void generate() {
+        File protoc = protocExecutable.get().asFile
+        File generator = generatorExecutable.get().asFile
+        if (!protoc.canExecute() || !generator.canExecute()) throw new GradleException('Code generation tools must be executable files')
+        String protocVersion = capture([protoc.absolutePath, '--version'])
+        if (!customProtoc.get() && protocVersion != "libprotoc ${expectedProtocVersion.get()}") {
+            throw new GradleException("Expected protoc ${expectedProtocVersion.get()}, found ${protocVersion}; use -PprotocPath=/absolute/path for an explicit workspace override")
+        }
+        if (!customGenerator.get()) {
+            String metadata = capture(['go', 'version', '-m', generator.absolutePath])
+            def matcher = metadata =~ /(?m)^\s*mod\s+latenighthack\.com\/protoc-gen-kt\s+(\S+)/
+            String version = matcher.find() ? matcher.group(1) : 'unknown'
+            String expected = expectedGeneratorVersion.get()
+            def revisionMatcher = metadata =~ /(?m)^\s*build\s+vcs.revision=(\S+)/
+            String revision = revisionMatcher.find() ? revisionMatcher.group(1) : ''
+            boolean matches = expected ==~ /[0-9a-f]{40}/ ? (version.endsWith('-' + expected.take(12)) || (revision == expected && !metadata.contains('vcs.modified=true'))) : version == expected
+            if (!matches) throw new GradleException("Expected protoc-gen-kt ${expectedGeneratorVersion.get()}, found ${version}. Install with go install latenighthack.com/protoc-gen-kt@${expectedGeneratorVersion.get()} or use -PprotocGenKtPath=/absolute/path for an explicit workspace override")
+        }
+        logger.lifecycle("Generation tools: ${protocVersion} sha256=${sha256(protoc)}; protoc-gen-kt sha256=${sha256(generator)}")
+        File source = sourceDirectory.get().asFile
+        List<File> schemas = []
+        source.eachFileRecurse { if (it.isFile() && it.name.endsWith('.proto')) schemas.add(it) }
+        schemas.sort { source.toPath().relativize(it.toPath()).toString() }
+        if (schemas.isEmpty()) throw new GradleException("No .proto schemas in ${source}")
+        File staged = new File(temporaryDir, 'generated')
+        staged.deleteDir(); staged.mkdirs()
+        def arguments = [protoc.absolutePath, "--plugin=protoc-gen-kt=${generator.absolutePath}", "--kt_out=${staged.absolutePath}", '-I', source.absolutePath]
+        includeDirectories.get().each { arguments.addAll(['-I', it]) }
+        arguments.addAll(schemas.collect { it.absolutePath })
+        def errors = new ByteArrayOutputStream()
+        def result = execOperations.exec {
+            commandLine(arguments)
+            errorOutput = errors
+            ignoreExitValue = true
+        }
+        if (result.exitValue != 0) throw new GradleException("protoc generation failed (${result.exitValue}):\n${errors.toString('UTF-8')}\nPinned tools are listed in gradle/protobuf-tools.properties; workspace overrides use -PprotocPath and -PprotocGenKtPath")
+        File target = generatedDirectory.get().asFile
+        target.deleteDir(); target.parentFile.mkdirs()
+        Files.move(staged.toPath(), target.toPath())
+    }
+}
+
+def pins = new Properties()
+rootProject.file('gradle/protobuf-tools.properties').withInputStream { pins.load(it) }
+def tool = { String name, String property ->
+    providers.gradleProperty(property).map { file(it).canonicalFile }.orElse(
+        providers.exec { commandLine('which', name); ignoreExitValue = true }.standardOutput.asText.map {
+            if (!it.trim()) throw new GradleException("Missing ${name}; see gradle/protobuf-tools.properties and README.md")
+            file(it.trim()).canonicalFile
+        }
+    )
+}
+def includes = providers.gradleProperty('protoIncludeDirs').map { value -> value.split(java.io.File.pathSeparator).findAll { it }.collect { file(it).canonicalPath } }.orElse([])
+tasks.register('generateProtoKotlin', GenerateKotlinProtos) {
+    description = 'Generates Kotlin with explicitly identified protoc and protoc-gen-kt tools.'
+    group = 'build'
+    sourceDirectory.set(layout.dir(providers.gradleProperty('protoSourceDir').map { file(it) }.orElse(file(project.ext.protobufSourceDir))))
+    generatedDirectory.set(layout.dir(providers.gradleProperty('protoOutputDir').map { file(it) }.orElse(layout.buildDirectory.dir('generated/proto/kotlin').map { it.asFile })))
+    includeDirectories.set(includes)
+    importedSchemas.from(includes.map { paths -> paths.collect { fileTree(it) { include '**/*.proto' } } })
+    protocExecutable.set(layout.file(tool('protoc', 'protocPath')))
+    generatorExecutable.set(layout.file(tool('protoc-gen-kt', 'protocGenKtPath')))
+    expectedProtocVersion.set(pins.getProperty('protoc'))
+    expectedGeneratorVersion.set(pins.getProperty('protocGenKt'))
+    customProtoc.set(providers.gradleProperty('protocPath').isPresent())
+    customGenerator.set(providers.gradleProperty('protocGenKtPath').isPresent())
+}
