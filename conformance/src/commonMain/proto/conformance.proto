@@ -8,10 +8,7 @@ option java_package = "com.latenighthack.ktbuf.conformance.v1";
 // proto3 feature protoc-gen-kt can currently emit, so the golden tests exercise the
 // generated encoder/decoder rather than only the hand-written codec.
 //
-// Two proto3 features are absent on purpose -- protoc-gen-kt cannot generate them:
-//   * map<K,V>       -- the generator crashes (nil pointer in its builder template)
-//   * optional (explicit presence) -- the generator rejects the file outright
-// Adding either one back will break the build, not just the tests.
+// Explicit presence remains unsupported and is covered by negative generator tests.
 message AllTypes {
     int32 f_int32 = 1;
     int64 f_int64 = 2;
@@ -79,4 +76,13 @@ service Conformance {
     rpc ServerStream(AllTypes) returns (stream AllTypes);
     rpc Bidi(stream AllTypes) returns (stream AllTypes);
     rpc ClientStream(stream AllTypes) returns (AllTypes);
+}
+
+// Maps are generated and exercised on every runtime target.
+message MapValue { int32 id = 1; string text = 2; }
+message MapHolder {
+    map<string, int32> ints = 1;
+    map<int32, MapValue> messages = 2;
+    map<bool, AllTypes.Kind> enums = 3;
+    map<string, bytes> blobs = 4;
 }
