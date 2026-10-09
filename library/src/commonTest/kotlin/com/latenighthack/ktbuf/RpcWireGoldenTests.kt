@@ -214,22 +214,9 @@ class RpcWireGoldenTests {
         }
     }
 
-    @Test
-    fun codesFromIntIsCurrentlyBroken() {
-        // CHARACTERIZATION TEST -- this pins a bug, it does not endorse it.
-        //
-        // Codes.from() ignores the value entirely: anything <= 16 becomes ABORTED and
-        // anything above becomes UNKNOWN, so it never returns the code it was handed.
-        // It is live in HttpRpcClient.apple.kt (NSError codes) and HttpRpcClient.js.kt
-        // (WebSocket close codes), where a normal 1000 close currently surfaces as
-        // UNKNOWN and an arbitrary NSError surfaces as the retriable ABORTED.
-        //
-        // Fixing it is a behaviour change and deliberately out of scope here; this test
-        // will fail the moment someone corrects it, which is the intent.
-        assertEquals(Codes.ABORTED, Codes.from(0), "0 should map to OK but yields ABORTED")
-        assertEquals(Codes.ABORTED, Codes.from(5), "5 should map to NOT_FOUND but yields ABORTED")
-        assertEquals(Codes.ABORTED, Codes.from(16), "16 should map to UNAUTHENTICATED but yields ABORTED")
-        assertEquals(Codes.UNKNOWN, Codes.from(17))
-        assertEquals(Codes.UNKNOWN, Codes.from(1000), "a WebSocket 1000 close reads as UNKNOWN")
+    @Test fun numericStatusLookupRoundTripsKnownCodesAndRejectsUnknownValues() {
+        for (code in Codes.entries) assertEquals(code, Codes.from(code.value), "numeric status ${code.value}")
+        for (value in listOf(-1, 17, 99, 101, Int.MIN_VALUE, Int.MAX_VALUE)) assertEquals(Codes.UNKNOWN, Codes.from(value))
     }
+
 }

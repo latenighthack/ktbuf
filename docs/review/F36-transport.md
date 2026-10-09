@@ -5,3 +5,13 @@ The source snapshot already contains strict length-delimited boundaries, fixed-w
 HttpRpcClient now normalizes bare, HTTP and HTTPS addresses consistently across JVM/Android, JS and Apple. It owns lifecycle admission/cancellation and exposes close/closeAndJoin. JVM/Android streaming uses structured child coroutines, ordered bounded inbound buffers with a total byte quota, explicit overflow failure, readiness gating and finally cleanup; no detached GlobalScope remains. Close cancels sockets, evicts the connection pool and joins the owned dispatcher. JS XHR cancellation aborts requests, progress caps response bytes, and stream teardown awaits WebSocket close. Apple uses an owned ephemeral NSURLSession, cancellable callback completion, bounded message/native-to-Kotlin conversion and awaited session invalidation. Foundation/browser unary response APIs buffer native responses; the parser and Kotlin conversion limits apply before Kotlin allocations, while server ingress limits reject oversized requests.
 
 Verification: library/RPC JVM suites, Node suites, Android compilation, iOS simulator compilation and library iOS simulator tests passed (`/tmp/ktbuf-F36-platforms.log`). Real socket tests cover bare/full HTTP URLs and close-and-join cancellation of a held response with observed peer socket EOF. Common tests cover lifecycle closure/admission, normalized HTTPS/WebSocket URLs and byte quota overflow without dropping accepted frames. External publication is separate; paired Fullhouse publication must use a unique content-derived dependency pin.
+
+## Numeric status lookup follow-up
+
+The public native `Codes.from(Int)` helper collapsed all values through 16 to
+`ABORTED` and failed to recognize `CLIENT_TIMEOUT` (100). Replaced the old bug
+characterization with a round-trip assertion for every status plus negative,
+unknown, and integer-boundary values. The regression failed against the old
+implementation (`/tmp/ktbuf-status-lookup-red.log`), then the full library JVM,
+Node, and Apple simulator suites passed (`/tmp/ktbuf-status-lookup-green.log`).
+Unknown numbers map to `UNKNOWN`; defined values retain their precise code.

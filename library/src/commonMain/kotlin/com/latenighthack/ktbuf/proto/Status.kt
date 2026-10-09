@@ -33,13 +33,7 @@ enum class Codes(val value: Int) {
     }
 
     companion object {
-        fun from(value: Int) = if (value > 100) {
-            Codes.UNKNOWN
-        } else if (value > 16) {
-            Codes.UNKNOWN
-        } else {
-            Codes.ABORTED
-        }
+        fun from(value: Int): Codes = entries.firstOrNull { it.value == value } ?: UNKNOWN
     }
 }
 
