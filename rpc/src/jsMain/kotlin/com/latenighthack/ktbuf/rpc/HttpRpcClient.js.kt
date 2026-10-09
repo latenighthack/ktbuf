@@ -63,7 +63,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         val path = if (useApiGateway) method.toApiGatewayPath(address) else method.toPath(address)
         httpPost(path, headers, request)
     }
-    private class WebSocketServerStream(private val webSocket: WebSocket, private val readyCallback: () -> Unit) : RpcServerStream {
+    private class WebSocketServerStream(private val webSocket: WebSocket, private val readyCallback: () -> Unit, private val path: String) : RpcServerStream {
         private val received = RpcInboundBuffer()
         private val ready = CompletableDeferred<Unit>()
         private val closed = CompletableDeferred<Unit>()
@@ -71,7 +71,13 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         init {
             webSocket.binaryType = BinaryType.ARRAYBUFFER
             webSocket.onopen = { ready.complete(Unit); runCatching { readyCallback() }.exceptionOrNull()?.let(::failed) }
-            webSocket.onclose = { closed.complete(Unit); received.close(); ready.completeExceptionally(IllegalStateException("RPC WebSocket closed before ready")) }
+            webSocket.onclose = { event ->
+                closed.complete(Unit)
+                val close = event as org.w3c.dom.CloseEvent
+                val failure = rpcWebSocketCloseFailure(path, close.code.toInt(), close.reason)
+                received.close(failure)
+                ready.completeExceptionally(failure ?: IllegalStateException("RPC WebSocket closed before ready"))
+            }
             webSocket.onerror = { failed(IllegalStateException("RPC WebSocket transport failed")) }
             webSocket.onmessage = { event ->
                 runCatching {
@@ -89,8 +95,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
     actual override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit): Unit = lifecycle.call {
         if (isNode) js("global.WebSocket = require('websocket').w3cwebsocket")
         val path = webSocketRpcAddress(address)
-        val webSocket = WebSocket(if (useApiGateway) method.toApiGatewayPath(path) else method.toPath(path))
-        val stream = WebSocketServerStream(webSocket, readyCallback)
+        val url = if (useApiGateway) method.toApiGatewayPath(path) else method.toPath(path)
+        val webSocket = WebSocket(url)
+        val stream = WebSocketServerStream(webSocket, readyCallback, url)
         try { stream.block() } finally { webSocket.close(); withContext(NonCancellable) { withTimeout(5_000) { stream.awaitClosed() } } }
     }
 }

@@ -2,6 +2,7 @@ package com.latenighthack.ktbuf.rpc
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
+import com.latenighthack.ktbuf.proto.Codes
 class TransportLifecycleTests {
     @Test fun closeCancelsAndJoinsOwnedCallsAndRejectsNewWork() = runTest {
         val lifecycle = TransportLifecycle(); val entered = CompletableDeferred<Unit>(); var cleaned = false
@@ -28,5 +29,10 @@ class TransportLifecycleTests {
         buffer.close()
         assertContentEquals(byteArrayOf(7, 8, 9), buffer.receive())
         assertFails { buffer.receive() }
+    }
+    @Test fun privateWebSocketCloseCodesPreserveRpcClassification() {
+        assertNull(rpcWebSocketCloseFailure("path", 1000, "normal"))
+        assertEquals(Codes.PERMISSION_DENIED, rpcWebSocketCloseFailure("path", 4007, "denied")!!.code)
+        assertEquals(Codes.UNAVAILABLE, rpcWebSocketCloseFailure("path", 1001, "going away")!!.code)
     }
 }

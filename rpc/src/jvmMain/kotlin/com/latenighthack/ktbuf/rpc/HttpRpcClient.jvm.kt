@@ -108,8 +108,15 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                     context.isReady.complete(Unit)
                     runCatching { readyCallback() }.exceptionOrNull()?.let { context.failed(it); webSocket.cancel() }
                 }
-                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { context.inbound.close(); webSocket.close(code, reason) }
-                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { context.inbound.close(); context.outbound.close() }
+                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                    val failure = rpcWebSocketCloseFailure(url, code, reason)
+                    if (failure == null) context.inbound.close() else context.failed(failure)
+                    webSocket.close(code, reason)
+                }
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    val failure = rpcWebSocketCloseFailure(url, code, reason)
+                    if (failure == null) { context.inbound.close(); context.outbound.close() } else context.failed(failure)
+                }
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { response?.close(); context.failed(t) }
                 private fun incoming(webSocket: WebSocket, bytes: ByteArray) {
                     val failure = if (bytes.size > MAX_RPC_MESSAGE_BYTES) IllegalArgumentException("RPC frame exceeds 16 MiB limit")
