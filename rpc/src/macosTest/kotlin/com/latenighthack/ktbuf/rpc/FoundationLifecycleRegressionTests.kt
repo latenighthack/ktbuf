@@ -17,7 +17,9 @@ class FoundationLifecycleRegressionTests {
                 if(rpc)HttpRpcClient(peer).unaryCall(RpcMethodSpecifier("peer","Transport","Hang",mapOf("id" to id)),emptyMap(),byteArrayOf(1))
                 else http.httpCall("$peer/api/peer.Transport/Hang?id=$id","POST",byteArrayOf(1),emptyMap())
             }
-            delay(100);withTimeout(500){job.cancelAndJoin()}
+            // Prove the request reached the peer before checking cancellation of its task.
+            withTimeout(2000){while(http.httpCall("$peer/started?id=$id","GET",byteArrayOf(),emptyMap()).decodeToString()!="true")delay(20)}
+            withTimeout(500){job.cancelAndJoin()}
             withTimeout(1000){while(http.httpCall("$peer/cancelled?id=$id","GET",byteArrayOf(),emptyMap()).decodeToString()!="true")delay(20)}
         }
     }
@@ -51,7 +53,8 @@ class FoundationLifecycleRegressionTests {
     @Test fun cancellingAnActualReceiveClosesThePeer() = runBlocking<Unit> {
         val url=peer();val http=PlatformHttpClient()
         val job=launch(Dispatchers.Default){HttpRpcClient(url).serverStreamingCall(RpcMethodSpecifier("peer","Transport","Wait",mapOf("id" to "native-cancel")),{receive()},{})}
-        delay(100);withTimeout(500){job.cancelAndJoin()}
+        withTimeout(2000){while(http.httpCall("$url/started?id=native-cancel","GET",byteArrayOf(),emptyMap()).decodeToString()!="true")delay(20)}
+        withTimeout(500){job.cancelAndJoin()}
         withTimeout(1000){while(http.httpCall("$url/cancelled?id=native-cancel","GET",byteArrayOf(),emptyMap()).decodeToString()!="true")delay(20)}
     }
     @Test fun connectionFailuresKeepTheirNativeCauseAndDomainMapping() = runBlocking<Unit> {
