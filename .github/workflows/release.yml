@@ -1,49 +1,61 @@
 name: Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
+  validation:
+    uses: ./.github/workflows/gradle.yml
   publish:
     name: Publish to Maven Central
-    # macOS so the Kotlin/Native iOS + linuxX64 targets are all built and included
-    # in the multiplatform publications.
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Verify tag matches project version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          PROJECT_VERSION="$(grep -o 'version = "[^"]*"' build.gradle.kts | head -1 | cut -d'"' -f2)"
-          echo "Tag version:     $TAG_VERSION"
-          echo "Project version: $PROJECT_VERSION"
-          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match version $PROJECT_VERSION in build.gradle.kts"
-            exit 1
-          fi
-
-      - name: Publish and release
-        # :patch is excluded — its protoc plugin (protoc-gen-kt-patch) no longer exists and
-        # nothing consumes ktbuf-patch; the published set matches what consumers use.
-        run: ./gradlew :library:publishToMavenCentral :rpc:publishToMavenCentral :server:publishToMavenCentral :test:publishToMavenCentral --no-configuration-cache --stacktrace
-        env:
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+    - uses: actions/checkout@v4
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v4
+    - name: Read reviewed tool versions
+      id: tools
+      run: |-
+        while IFS='=' read -r key value; do
+          case "$key" in protoc|protocGenKt) echo "$key=$value" >> "$GITHUB_OUTPUT" ;; esac
+        done < gradle/protobuf-tools.properties
+    - uses: actions/setup-go@v5
+      with:
+        go-version: 1.26.1
+    - uses: arduino/setup-protoc@v3
+      with:
+        version: ${{ steps.tools.outputs.protoc }}
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Install reviewed generator
+      run: |-
+        go install latenighthack.com/protoc-gen-kt@${{ steps.tools.outputs.protocGenKt }}
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+    - name: Verify tag matches project version
+      run: |
+        TAG_VERSION="${GITHUB_REF_NAME#v}"
+        PROJECT_VERSION="$(grep -o 'version = "[^"]*"' build.gradle.kts | head -1 | cut -d'"' -f2)"
+        echo "Tag version:     $TAG_VERSION"
+        echo "Project version: $PROJECT_VERSION"
+        if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+          echo "::error::Tag $GITHUB_REF_NAME does not match version $PROJECT_VERSION in build.gradle.kts"
+          exit 1
+        fi
+    - name: Publish and release
+      run: ./gradlew :library:publishToMavenCentral :rpc:publishToMavenCentral :patch:publishToMavenCentral :server:publishToMavenCentral :test:publishToMavenCentral
+        --no-configuration-cache --stacktrace
+      env:
+        ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+        ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+        ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+    needs: validation
+permissions:
+  contents: read
+'on':
+  push:
+    tags:
+    - v*

@@ -1,91 +1,123 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-# This workflow will build a Java project with Gradle and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-gradle
-
-name: Java CI with Gradle
-
-on:
+name: Runtime and generated consumers
+'on':
   push:
-    branches: [ "main" ]
+    branches:
+    - main
   pull_request:
-    branches: [ "main" ]
-  workflow_call:
-
+    branches:
+    - main
+  workflow_call: {}
 permissions:
   contents: read
-
 jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - run: |-
+        python -m pip install PyYAML==6.0.3
+        python scripts/test-validation-gates.py
   build:
+    needs: contracts
     strategy:
+      fail-fast: false
       matrix:
         include:
-          # Targets are qualified per module rather than run as bare task names.
-          # A bare `jvmTest` would also pull in :patch, whose protoc plugin
-          # (protoc-gen-kt-patch) no longer exists, so its test sources cannot compile
-          # -- the same reason release.yml skips publishing it.
-          #
-          # Apple targets. iosArm64 is device-only and has no test task.
-          - target: ':library:iosSimulatorArm64Test :conformance:iosSimulatorArm64Test'
-            os: macos-latest
-          - target: ':library:macosArm64Test :conformance:macosArm64Test'
-            os: macos-latest
-          # The x64 Apple targets run on an Intel runner on purpose: Kotlin/Native
-          # disables a test task it cannot execute on the host, so on arm64
-          # macos-latest these link but never run and the job goes green having
-          # tested nothing.
-          - target: ':library:iosX64Test :conformance:iosX64Test'
-            os: macos-15-intel
-          - target: ':library:macosX64Test :conformance:macosX64Test'
-            os: macos-15-intel
-          - target: ':library:jvmTest :conformance:jvmTest'
-            os: ubuntu-latest
-          - target: ':library:linuxX64Test :conformance:linuxX64Test'
-            os: ubuntu-latest
-          # commonTest never ran on JS before; jsNodeTest needs no browser binary.
-          - target: ':library:jsNodeTest :conformance:jsNodeTest'
-            os: ubuntu-latest
-          - target: ':library:testDebugUnitTest :conformance:testDebugUnitTest'
-            os: ubuntu-latest
-          - target: ':library:testReleaseUnitTest :conformance:testReleaseUnitTest'
-            os: ubuntu-latest
-          # JVM-only module: the live HTTP/WebSocket transport round-trips.
-          - target: ':server:test'
-            os: ubuntu-latest
+        - target: :library:jvmTest :conformance:jvmTest :patch:jvmTest :rpc:jvmTest
+          os: ubuntu-latest
+        - target: :library:testDebugUnitTest :conformance:testDebugUnitTest :patch:testDebugUnitTest :rpc:testDebugUnitTest
+          os: ubuntu-latest
+        - target: :library:testReleaseUnitTest :conformance:testReleaseUnitTest :patch:testReleaseUnitTest :rpc:testReleaseUnitTest
+          os: ubuntu-latest
+        - target: :library:jsNodeTest :conformance:jsNodeTest :patch:jsNodeTest :rpc:jsNodeTest
+          os: ubuntu-latest
+        - target: :library:linuxX64Test :conformance:linuxX64Test :patch:linuxX64Test :rpc:linuxX64Test
+          os: ubuntu-latest
+        - target: :library:macosArm64Test :conformance:macosArm64Test :patch:macosArm64Test :rpc:macosArm64Test
+          os: macos-latest
+        - target: :library:macosX64Test :conformance:macosX64Test :patch:macosX64Test :rpc:macosX64Test
+          os: macos-15-intel
+        - target: :library:iosSimulatorArm64Test :conformance:iosSimulatorArm64Test :patch:iosSimulatorArm64Test :rpc:iosSimulatorArm64Test
+          os: macos-latest
+        - target: :library:iosX64Test :conformance:iosX64Test :patch:iosX64Test :rpc:iosX64Test
+          os: macos-15-intel
+        - target: :rpc:jsBrowserTest
+          os: ubuntu-latest
+        - target: :server:test
+          os: ubuntu-latest
     runs-on: ${{ matrix.os }}
-
     steps:
-    - uses: actions/checkout@v3
-    - name: Validate Gradle Wrapper
-      uses: gradle/wrapper-validation-action@v1
-    - uses: actions/cache@v3
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
       with:
-        path: |
-          ~/.konan
-        key: ${{ runner.os }}-${{ hashFiles('**/.lock') }}
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
+        distribution: temurin
         java-version: '17'
-        distribution: 'temurin'
-    # The :conformance module generates its Kotlin from conformance.proto at build
-    # time, so both protoc and the protoc-gen-kt plugin must be on PATH.
-    - name: Set up Go
-      uses: actions/setup-go@v5
+    - uses: actions/setup-go@v5
       with:
-        go-version: '1.26.1'
-    - name: Install protoc
-      uses: arduino/setup-protoc@v3
+        go-version: 1.26.1
+    - name: Read reviewed tool versions
+      id: tools
+      run: |-
+        while IFS='=' read -r key value; do
+          case "$key" in protoc|protocGenKt) echo "$key=$value" >> "$GITHUB_OUTPUT" ;; esac
+        done < gradle/protobuf-tools.properties
+    - uses: arduino/setup-protoc@v3
       with:
-        version: '25.1'
+        version: ${{ steps.tools.outputs.protoc }}
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - name: Install protoc-gen-kt
-      run: |
-        go install latenighthack.com/protoc-gen-kt@v0.1.0
+    - name: Install reviewed generator
+      run: |-
+        go install latenighthack.com/protoc-gen-kt@${{ steps.tools.outputs.protocGenKt }}
         echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-    - name: Build with Gradle
-      uses: gradle/gradle-build-action@ce999babab2de1c4b649dc15f0ee67e6246c994f
+    - uses: gradle/actions/setup-gradle@v4
+    - name: Run platform regressions
+      run: ./gradlew ${{ matrix.target }} --console=plain --stacktrace
+    - name: Upload test evidence
+      if: always()
+      uses: actions/upload-artifact@v4
       with:
-        arguments: ${{ matrix.target }}
+        name: tests-${{ strategy.job-index }}
+        path: |-
+          **/build/test-results/**
+          **/build/reports/tests/**
+        if-no-files-found: error
+  generator:
+    needs: contracts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - uses: actions/setup-go@v5
+      with:
+        go-version: 1.26.1
+    - name: Read reviewed tool versions
+      id: tools
+      run: |-
+        while IFS='=' read -r key value; do
+          case "$key" in protoc|protocGenKt) echo "$key=$value" >> "$GITHUB_OUTPUT" ;; esac
+        done < gradle/protobuf-tools.properties
+    - uses: arduino/setup-protoc@v3
+      with:
+        version: ${{ steps.tools.outputs.protoc }}
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Install reviewed generator
+      run: |-
+        go install latenighthack.com/protoc-gen-kt@${{ steps.tools.outputs.protocGenKt }}
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+    - uses: gradle/actions/setup-gradle@v4
+    - name: Checkout paired generator
+      uses: actions/checkout@v4
+      with:
+        repository: latenighthack/protoc-gen-kt
+        ref: ${{ steps.tools.outputs.protocGenKt }}
+        path: build/paired-generator
+    - name: Compile and execute emitted consumers
+      run: scripts/validate-generator.sh build/paired-generator
+    - name: Verify executable and schema cache inputs
+      run: python3 scripts/test-codegen-inputs.py --plugin "$(go env GOPATH)/bin/protoc-gen-kt"

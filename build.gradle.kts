@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+
 import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import com.vanniktech.maven.publish.SonatypeHost
 
@@ -57,5 +59,30 @@ subprojects {
                 }
             }
         }
+    }
+}
+
+// Compile the separately checked-out generator's emitted consumers against this runtime.
+val generatorCompiler by configurations.creating { isCanBeConsumed = false }
+val generatorConsumer by configurations.creating { isCanBeConsumed = false }
+dependencies {
+    generatorCompiler("org.jetbrains.kotlin:kotlin-compiler-embeddable:${libs.versions.kotlin.get()}")
+    generatorConsumer("org.jetbrains.kotlin:kotlin-stdlib:${libs.versions.kotlin.get()}")
+    generatorConsumer(libs.kotlinx.coroutines.core)
+}
+tasks.register("writeGeneratorClasspaths") {
+    dependsOn(":library:jvmJar")
+    val runtimeJar = project(":library").layout.buildDirectory.file("libs/library-jvm-${project.version}.jar")
+    val output = layout.buildDirectory.file("generator-classpaths.json")
+    inputs.files(generatorCompiler, generatorConsumer, runtimeJar)
+    outputs.file(output)
+    doLast {
+        val runtime = runtimeJar.get().asFile
+        check(runtime.isFile) { "Runtime JAR is missing: $runtime" }
+        val paths = mapOf(
+            "compiler" to generatorCompiler.asPath,
+            "consumer" to (generatorConsumer.asPath + File.pathSeparator + runtime.absolutePath)
+        )
+        output.get().asFile.apply { parentFile.mkdirs(); writeText(JsonOutput.toJson(paths)) }
     }
 }

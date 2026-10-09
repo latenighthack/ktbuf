@@ -45,13 +45,13 @@ tasks.withType<KotlinJsTest>().configureEach {
 tasks.withType<KotlinNativeTest>().configureEach {
     if (name.startsWith("macos")) {
         usesService(transportPeer)
-    inputs.file(layout.projectDirectory.file("src/testFixtures/transport_peer.py"))
-    outputs.upToDateWhen { false }
+        inputs.file(layout.projectDirectory.file("src/testFixtures/transport_peer.py"))
+        outputs.upToDateWhen { false }
         doFirst {
-        val url = transportPeer.get().url()
-        environment("KTBUF_PEER_URL", url)
-        rootProject.layout.buildDirectory.file("transport-peer-url.txt").get().asFile.apply { parentFile.mkdirs(); writeText(url) }
-    }
+            val url = transportPeer.get().url()
+            environment("KTBUF_PEER_URL", url)
+            rootProject.layout.buildDirectory.file("transport-peer-url.txt").get().asFile.apply { parentFile.mkdirs(); writeText(url) }
+        }
     }
 }
 
