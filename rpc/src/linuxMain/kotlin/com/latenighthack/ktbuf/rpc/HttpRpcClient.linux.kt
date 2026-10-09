@@ -1,5 +1,8 @@
 package com.latenighthack.ktbuf.rpc
 
+import com.latenighthack.ktbuf.net.RpcResponseException
+import com.latenighthack.ktbuf.net.toPath
+import com.latenighthack.ktbuf.proto.Codes
 import com.latenighthack.ktbuf.net.RpcClient
 import com.latenighthack.ktbuf.net.RpcMethodSpecifier
 import com.latenighthack.ktbuf.net.RpcResponse
@@ -12,7 +15,7 @@ public actual class HttpRpcClient actual constructor(serverPath: String, useApiG
         headers: Map<String, String>,
         request: ByteArray
     ): RpcResponse {
-        TODO("Not yet implemented")
+        throw RpcResponseException(method.toPath(""), "POST", Codes.UNIMPLEMENTED, "Built-in RPC transport is not supported on Linux; supply a custom RpcClient")
     }
 
     actual override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) =
@@ -24,6 +27,7 @@ public actual class HttpRpcClient actual constructor(serverPath: String, useApiG
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     ) {
+        throw RpcResponseException(method.toPath(""), "WS", Codes.UNIMPLEMENTED, "Built-in RPC transport is not supported on Linux; supply a custom RpcClient")
     }
 
 }
