@@ -26,4 +26,17 @@ class MessageBoundaryRegressionTests {
         assertEquals(2, r.currentFieldNumber)
         assertEquals(7, r.readInt32())
     }
+    @Test fun maliciousTwoByteNestedLengthCannotFabricateAZeroPaddedChild() {
+        // Locker.open tag followed by a claimed 127-byte message, with no remaining bytes.
+        val reader = reader("0a7f")
+        assertTrue(reader.nextField())
+        var enteredChild = false
+        assertFails { reader.readField { enteredChild = true; Unit } }
+        assertFalse(enteredChild, "Reject the length before slicing or invoking a child decoder")
+        for (hex in listOf("0a8080808008", "0a80808080808080808002", "0a80")) {
+            val malformed = reader(hex)
+            assertTrue(malformed.nextField())
+            assertFails { malformed.readField { Unit } }
+        }
+    }
 }

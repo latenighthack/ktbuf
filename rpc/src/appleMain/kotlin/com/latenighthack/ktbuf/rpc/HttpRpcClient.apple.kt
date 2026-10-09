@@ -60,14 +60,25 @@ class MainQueueDispatcher: CoroutineDispatcher(), Delay {
 
 private val mainDispatcher = MainQueueDispatcher()
 
+@OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
+    private val address = normalizedHttpRpcAddress(serverPath)
+    private val lifecycle = TransportLifecycle()
+    private val closed = CompletableDeferred<Unit>()
+    private val delegate = object : NSObject(), NSURLSessionDelegateProtocol {
+        override fun URLSession(session: NSURLSession, didBecomeInvalidWithError: NSError?) { closed.complete(Unit) }
+    }
+    private val session = NSURLSession.sessionWithConfiguration(NSURLSessionConfiguration.ephemeralSessionConfiguration, delegate, null)
+    actual fun close() { lifecycle.close(); session.invalidateAndCancel() }
+    actual suspend fun closeAndJoin() { close(); lifecycle.join(); closed.await() }
     @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
         headers: Map<String, String>,
         request: ByteArray
-    ): RpcResponse = suspendCoroutine { continuation ->
-        val url = method.toPath(serverPath)
+    ): RpcResponse = lifecycle.call { suspendCancellableCoroutine { continuation ->
+        checkedRpcMessage(request)
+        val url = if (useApiGateway) method.toApiGatewayPath(address) else method.toPath(address)
         val requestUrl = NSURL.URLWithString(url)!!
         val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl).apply {
             HTTPMethod = "POST"
@@ -78,111 +89,93 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             HTTPBody = request.toNSData()
         }
 
-        val task = NSURLSession.sharedSession.dataTaskWithRequest(urlRequest) { data, response, error ->
-            if (error != null) {
-                continuation.resumeWithException(
-                    RpcResponseException(
-                        path = url,
-                        verb = "POST",
-                        code = Codes.from(error.code.toInt()),
-                        errorMessage = error.localizedDescription ?: "Unknown error"
-                    )
-                )
-            } else {
-                val httpResponse = response as NSHTTPURLResponse
-                val statusCode = httpResponse.statusCode.toInt()
-                if (statusCode < 200 || statusCode > 299) {
-                    val errorMessage = data?.let {
-                        NSString.create(data = it, encoding = NSUTF8StringEncoding)?.toString()
-                    } ?: ""
-                    val status = Status.fromHTTPCode(statusCode, errorMessage)
-                    continuation.resumeWithException(
-                        RpcResponseException(
-                            path = url,
-                            verb = "POST",
-                            code = status.code,
-                            errorMessage = status.message
-                        )
-                    )
-                } else {
-                    val headers = httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
-                    val responseData = data?.toByteArray() ?: byteArrayOf()
-                    continuation.resume(RpcResponse(data = responseData, headers = headers))
+        val task = session.dataTaskWithRequest(urlRequest) { data, response, error ->
+            continuation.completeCallback(runCatching {
+                if (error != null) throw RpcResponseException(url, "POST", Codes.from(error.code.toInt()), error.localizedDescription ?: "Unknown error")
+                val httpResponse = response as? NSHTTPURLResponse ?: error("Missing RPC HTTP response")
+                require(data == null || data.length <= MAX_RPC_MESSAGE_BYTES.toULong()) { "RPC response exceeds 16 MiB limit" }
+                val responseData = data?.toByteArray() ?: byteArrayOf()
+                if (httpResponse.statusCode !in 200L..299L) {
+                    val status = Status.fromHTTPCode(httpResponse.statusCode.toInt(), responseData.decodeToString())
+                    throw RpcResponseException(url, "POST", status.code, status.message)
                 }
-            }
+                val responseHeaders = httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
+                RpcResponse(responseData, responseHeaders)
+            })
         }
         task.resume()
-    }
+        continuation.invokeOnCancellation { task.cancel() }
+    } }
 
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
-    ) {
-        val url = if (useApiGateway) {
-            method.toApiGatewayPath(serverPath)
-        } else {
-            method.toPath(serverPath)
-        }
+    ): Unit = lifecycle.call {
+        val path = webSocketRpcAddress(address)
+        val url = if (useApiGateway) method.toApiGatewayPath(path) else method.toPath(path)
 
         val requestUrl = NSURL.URLWithString(url)!!
         val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl)
 
-        val webSocketTask = NSURLSession.sharedSession.webSocketTaskWithRequest(urlRequest)
+        val webSocketTask = session.webSocketTaskWithRequest(urlRequest)
         // Foundation defaults to 1 MiB, smaller than ordinary streamed RPC
         // snapshots (for example a full game frame set). Keep a bounded receive
         // buffer, but allow the same multi-megabyte payloads as unary calls.
         webSocketTask.maximumMessageSize = 16L * 1024 * 1024
         val serverStream = object : RpcServerStream {
-            override suspend fun receive(): ByteArray = suspendCoroutine { cont ->
+            override suspend fun receive(): ByteArray = suspendCancellableCoroutine { cont ->
                 webSocketTask.receiveMessageWithCompletionHandler { message, error ->
                     if (error != null) {
-                        cont.resumeWithException(
+                        cont.completeCallback(Result.failure(
                             RpcResponseException(
                                 path = url,
                                 verb = "RECEIVE",
                                 code = Codes.from(error.code.toInt()),
                                 errorMessage = error.localizedDescription ?: "Unknown error"
                             )
-                        )
+                        ))
                     } else {
-                        val data = message?.data!!.toByteArray()
-                        cont.resume(data)
+                        cont.completeCallback(runCatching {
+                            val data = message?.data ?: error("Missing RPC frame")
+                            require(data.length <= MAX_RPC_MESSAGE_BYTES.toULong()) { "RPC frame exceeds 16 MiB limit" }
+                            data.toByteArray()
+                        })
                     }
                 }
+                cont.invokeOnCancellation { webSocketTask.cancel() }
             }
 
-            override suspend fun send(bytes: ByteArray) = suspendCoroutine<Unit> { cont ->
+            override suspend fun send(bytes: ByteArray) = suspendCancellableCoroutine<Unit> { cont ->
+                checkedRpcMessage(bytes)
                 val data = bytes.toNSData()
                 val message = NSURLSessionWebSocketMessage(data)
 
                 webSocketTask.sendMessage(message) { error ->
                     if (error != null) {
-                        cont.resumeWithException(
+                        cont.completeCallback(Result.failure(
                             RpcResponseException(
                                 path = url,
                                 verb = "SEND",
                                 code = Codes.from(error.code.toInt()),
                                 errorMessage = error.localizedDescription ?: "Unknown error"
                             )
-                        )
+                        ))
                     } else {
-                        cont.resume(Unit)
+                        cont.completeCallback(Result.success(Unit))
                     }
                 }
+                cont.invokeOnCancellation { webSocketTask.cancel() }
             }
 
-            override suspend fun closeOutbound() {
-            }
+            override suspend fun closeOutbound() { webSocketTask.cancel() }
 
-            override suspend fun closeInbound() {
-            }
+            override suspend fun closeInbound() { webSocketTask.cancel() }
         }
 
         webSocketTask.resume()
-        readyCallback()
-
         try {
+            readyCallback()
             serverStream.block()
         } catch (e: Exception) {
             throw e

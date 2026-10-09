@@ -7,6 +7,8 @@ import com.latenighthack.ktbuf.net.RpcServerStream
 
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 public actual class HttpRpcClient actual constructor(serverPath: String, useApiGateway: Boolean) : RpcClient {
+    actual fun close() {}
+    actual suspend fun closeAndJoin() {}
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
         headers: Map<String, String>,
