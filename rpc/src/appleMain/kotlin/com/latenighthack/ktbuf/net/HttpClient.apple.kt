@@ -2,6 +2,8 @@ package com.latenighthack.ktbuf.net
 
 import com.latenighthack.ktbuf.proto.Codes
 import com.latenighthack.ktbuf.proto.Status
+import com.latenighthack.ktbuf.proto.RPC_STATUS_HEADER
+import com.latenighthack.ktbuf.proto.rpcHeader
 import com.latenighthack.ktbuf.proto.fromHTTPCode
 import com.latenighthack.ktbuf.rpc.toByteArray
 import com.latenighthack.ktbuf.rpc.toNSData
@@ -41,11 +43,13 @@ actual class PlatformHttpClient: HttpClient {
             } else {
                 val httpResponse = response as NSHTTPURLResponse
                 val statusCode = httpResponse.statusCode.toInt()
-                if (statusCode < 200 || statusCode > 299) {
+                val responseHeaders = httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
+                val statusHeader = responseHeaders.rpcHeader(RPC_STATUS_HEADER)
+                if (statusCode < 200 || statusCode > 299 || (statusHeader != null && Status.fromHTTPCode(statusCode, null, statusHeader).code != Codes.OK)) {
                     val errorMessage = data?.let {
                         NSString.create(data = it, encoding = NSUTF8StringEncoding)?.toString()
                     } ?: ""
-                    val status = Status.fromHTTPCode(statusCode, errorMessage)
+                    val status = Status.fromHTTPCode(statusCode, errorMessage, statusHeader)
                     continuation.resumeWithException(
                         RpcResponseException(
                             path = url,

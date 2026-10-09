@@ -95,11 +95,12 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 val httpResponse = response as? NSHTTPURLResponse ?: error("Missing RPC HTTP response")
                 require(data == null || data.length <= MAX_RPC_MESSAGE_BYTES.toULong()) { "RPC response exceeds 16 MiB limit" }
                 val responseData = data?.toByteArray() ?: byteArrayOf()
-                if (httpResponse.statusCode !in 200L..299L) {
-                    val status = Status.fromHTTPCode(httpResponse.statusCode.toInt(), responseData.decodeToString())
+                val responseHeaders = httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
+                val statusHeader = responseHeaders.rpcHeader(RPC_STATUS_HEADER)
+                if (httpResponse.statusCode !in 200L..299L || (statusHeader != null && Status.fromHTTPCode(httpResponse.statusCode.toInt(), null, statusHeader).code != Codes.OK)) {
+                    val status = Status.fromHTTPCode(httpResponse.statusCode.toInt(), responseData.decodeToString(), statusHeader)
                     throw RpcResponseException(url, "POST", status.code, status.message)
                 }
-                val responseHeaders = httpResponse.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
                 RpcResponse(responseData, responseHeaders)
             })
         }

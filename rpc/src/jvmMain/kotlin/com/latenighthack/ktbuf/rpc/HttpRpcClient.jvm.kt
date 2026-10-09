@@ -56,9 +56,11 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 override fun onResponse(call: Call, response: Response) {
                     val result = runCatching {
                         response.use {
-                            if (response.code > 299 || response.code < 200) {
+                            val statusHeader = response.headers.values(RPC_STATUS_HEADER).takeIf { it.isNotEmpty() }?.joinToString(",")
+                            if (response.code > 299 || response.code < 200 ||
+                                (statusHeader != null && Status.fromHTTPCode(response.code, null, statusHeader).code != Codes.OK)) {
                                 val errorMessage = response.body!!.boundedBytes().decodeToString()
-                                val status = Status.fromHTTPCode(response.code, errorMessage)
+                                val status = Status.fromHTTPCode(response.code, errorMessage, statusHeader)
                                 throw RpcResponseException(method.toPath(""), "POST", status.code, status.message, RuntimeException(errorMessage))
                             } else {
                                 RpcResponse(response.body!!.boundedBytes(), response.headers.toMap())

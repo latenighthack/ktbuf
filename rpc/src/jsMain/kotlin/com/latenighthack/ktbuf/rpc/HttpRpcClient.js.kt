@@ -31,8 +31,9 @@ private suspend fun httpPost(url: String, headers: Map<String, String>, data: By
                     val parts = it.split(":", limit = 2)
                     if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
                 }.toMap()
-                if (xhr.status / 100 != 2) {
-                    val status = Status.fromHTTPCode(xhr.status.toInt(), bytes.decodeToString())
+                val statusHeader = xhr.getResponseHeader(RPC_STATUS_HEADER)
+                if (xhr.status / 100 != 2 || (statusHeader != null && Status.fromHTTPCode(xhr.status.toInt(), null, statusHeader).code != Codes.OK)) {
+                    val status = Status.fromHTTPCode(xhr.status.toInt(), bytes.decodeToString(), statusHeader)
                     throw RpcResponseException(xhr.responseURL, "POST", status.code, status.message)
                 }
                 RpcResponse(bytes, responseHeaders)

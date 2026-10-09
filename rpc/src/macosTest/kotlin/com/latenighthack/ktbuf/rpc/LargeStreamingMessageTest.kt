@@ -46,7 +46,8 @@ class LargeStreamingMessageTest {
                 val buffer = allocArray<ByteVar>(32)
                 checkNotNull(fgets(buffer, 32, pipe)).toKString().trim().toInt()
             }
-            HttpRpcClient("ws://127.0.0.1:$port").serverStreamingCall(
+            val client = HttpRpcClient("http://127.0.0.1:$port")
+            try { client.serverStreamingCall(
                 RpcMethodSpecifier("test", "Snapshot", "Watch"),
                 block = {
                     val payload = receive()
@@ -54,7 +55,7 @@ class LargeStreamingMessageTest {
                     assertTrue(payload.all { it == 42.toByte() })
                 },
                 readyCallback = {},
-            )
+            ) } finally { client.closeAndJoin() }
         } finally {
             pclose(pipe)
         }

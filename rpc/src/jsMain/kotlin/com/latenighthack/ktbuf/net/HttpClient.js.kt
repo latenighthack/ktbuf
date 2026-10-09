@@ -1,6 +1,8 @@
 package com.latenighthack.ktbuf.net
 
 import com.latenighthack.ktbuf.proto.Status
+import com.latenighthack.ktbuf.proto.Codes
+import com.latenighthack.ktbuf.proto.RPC_STATUS_HEADER
 import com.latenighthack.ktbuf.proto.fromHTTPCode
 import com.latenighthack.ktbuf.rpc.errorBodyText
 import org.khronos.webgl.ArrayBuffer
@@ -26,10 +28,11 @@ private fun statusHandler(method: String, xhr: XMLHttpRequest, coroutineContext:
                 }
             }
 
-        if (xhr.status / 100 == 2) {
+        val statusHeader = xhr.getResponseHeader(RPC_STATUS_HEADER)
+        if (xhr.status / 100 == 2 && (statusHeader == null || Status.fromHTTPCode(xhr.status.toInt(), null, statusHeader).code == Codes.OK)) {
             coroutineContext.resume(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>())
         } else {
-            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText())
+            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText(), statusHeader)
             coroutineContext.resumeWithException(RpcResponseException(xhr.responseURL, method, status.code, status.message))
         }
     }

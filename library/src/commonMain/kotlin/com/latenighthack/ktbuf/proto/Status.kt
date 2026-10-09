@@ -42,8 +42,14 @@ data class Status(val code: Codes, val message: String) {
 }
 
 // https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
-fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?): Status {
-    val code = when (httpCode) {
+fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?): Status = fromHTTPCode(httpCode, message, null)
+
+/** Exact metadata disambiguates shared HTTP statuses; malformed or contradictory metadata is a protocol error. */
+fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?, statusHeader: String?): Status {
+    val code = if (statusHeader != null) {
+        val value = statusHeader.takeIf { it.isNotEmpty() && it.all { char -> char in '0'..'9' } }?.toIntOrNull()
+        Codes.entries.firstOrNull { it.value == value }?.takeIf { it.toHttpCode() == httpCode } ?: Codes.DATA_LOSS
+    } else when (httpCode) {
         200 -> Codes.OK
         400 -> {
             val lowerMessage = message?.lowercase()
@@ -125,3 +131,8 @@ fun Status.Companion.fromWSCode(wsCode: Int, message: String?): Status {
 
     return Status(code, message ?: "")
 }
+
+/** Unary RPC status metadata. Multiple case aliases or duplicate values are rejected by the decoder. */
+const val RPC_STATUS_HEADER = "grpc-status"
+fun Map<String, String>.rpcHeader(name: String): String? = entries.filter { it.key.equals(name, ignoreCase = true) }
+    .takeIf { it.isNotEmpty() }?.joinToString(",") { it.value }

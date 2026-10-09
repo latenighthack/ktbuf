@@ -13,6 +13,7 @@ import io.ktor.utils.io.*
 import com.latenighthack.ktbuf.ProtobufOutputStream
 import com.latenighthack.ktbuf.net.*
 import com.latenighthack.ktbuf.proto.toHttpCode
+import com.latenighthack.ktbuf.proto.RPC_STATUS_HEADER
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -94,26 +95,24 @@ public fun <Server: Any> Routing.serveUnary(
 
             val outgoingBytes = outStream.toByteArray()
 
+            call.rpcStatusHeader(Codes.OK)
             call.respond(outgoingBytes)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (limit: ProtobufOutputLimitException) {
-            call.respondText("OutOfRange: response exceeds encoding limits", status = HttpStatusCode.BadRequest)
+            call.respondRpcError(Codes.OUT_OF_RANGE, "OutOfRange: response exceeds encoding limits")
         } catch (limit: ByteArrayLimitException) {
-            call.respondText("OutOfRange: protobuf buffer exceeds byte limits", status = HttpStatusCode.BadRequest)
+            call.respondRpcError(Codes.OUT_OF_RANGE, "OutOfRange: protobuf buffer exceeds byte limits")
         } catch (limit: ProtobufLimitException) {
-            call.respondText("OutOfRange: request exceeds decoding limits", status = HttpStatusCode.BadRequest)
+            call.respondRpcError(Codes.OUT_OF_RANGE, "OutOfRange: request exceeds decoding limits")
         } catch (rpcException: RpcResponseException) {
-            call.respondText(
-                rpcException.errorMessage,
-                status = HttpStatusCode(rpcException.code.toHttpCode(), rpcException.code.name)
-            )
+            call.respondRpcError(rpcException.code, rpcException.errorMessage)
         } catch (invalid: IllegalArgumentException) {
-            call.respondText("InvalidArgument: malformed protobuf", status = HttpStatusCode.BadRequest)
+            call.respondRpcError(Codes.INVALID_ARGUMENT, "InvalidArgument: malformed protobuf")
         } catch (t: Throwable) {
             println("gRPC unary error($path): $t")
             t.printStackTrace()
-            call.respondText(t.toString(), status = HttpStatusCode.InternalServerError)
+            call.respondRpcError(Codes.UNKNOWN, t.toString())
         }
     }
 }
@@ -267,4 +266,14 @@ private fun rpcCloseReason(failure: Throwable?): CloseReason = when (failure) {
     is RpcResponseException -> CloseReason((4000 + failure.code.value).toShort(), failure.code.name)
     is IllegalArgumentException -> CloseReason(4003.toShort(), "Malformed protobuf")
     else -> CloseReason(CloseReason.Codes.INTERNAL_ERROR, "")
+}
+
+private fun ApplicationCall.rpcStatusHeader(code: Codes) {
+    response.headers.append(RPC_STATUS_HEADER, code.value.toString())
+    // Browser clients need access when an embedding host enables cross-origin RPCs.
+    response.headers.append(HttpHeaders.AccessControlExposeHeaders, RPC_STATUS_HEADER)
+}
+private suspend fun ApplicationCall.respondRpcError(code: Codes, message: String) {
+    rpcStatusHeader(code)
+    respondText(message, status = HttpStatusCode(code.toHttpCode(), code.name))
 }
