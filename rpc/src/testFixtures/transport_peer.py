@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs
 
 cancelled = set()
+handshakes = {}
 lock = threading.Lock()
 PROTOCOL = "ktbuf.stream.v1"
 END = "ktbuf.requests.end"
@@ -42,6 +43,9 @@ class Peer(BaseHTTPRequestHandler):
             if parsed.path.endswith("/cancelled"):
                 with lock: result = identifier in cancelled
                 self.reply(200, str(result).lower().encode())
+            elif parsed.path.endswith("/handshake"):
+                with lock: result = handshakes.get(identifier, "")
+                self.reply(200, result.encode())
             elif parsed.path.endswith("/Hang"):
                 deadline = time.monotonic() + 3
                 while time.monotonic() < deadline:
@@ -55,7 +59,9 @@ class Peer(BaseHTTPRequestHandler):
                 self.reply(409, b"arbitrary error detail", [("grpc-status", "6")])
             else:
                 self.reply(200, body, [("X-Colon", "value:with:colons"), ("X-Repeat", "first"), ("X-Repeat", "second"), ("X-Empty", "")])
-        except (OSError, BrokenPipeError): pass
+        except (OSError, BrokenPipeError):
+            if parsed.path.endswith("/Hang"):
+                with lock: cancelled.add(identifier)
     def frame(self, opcode, payload=b""):
         size = len(payload)
         header = bytes([0x80 | opcode])
@@ -81,6 +87,7 @@ class Peer(BaseHTTPRequestHandler):
         offered = [value.strip() for value in self.headers.get("Sec-WebSocket-Protocol", "").split(",")]
         if PROTOCOL in offered: self.send_header("Sec-WebSocket-Protocol", PROTOCOL)
         self.end_headers()
+        with lock: handshakes[identifier] = self.headers.get("Authorization", "")
         self.connection.settimeout(10)
         self.close_connection = True
         try:

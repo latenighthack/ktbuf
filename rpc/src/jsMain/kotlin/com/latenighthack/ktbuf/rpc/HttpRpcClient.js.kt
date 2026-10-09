@@ -6,57 +6,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import org.khronos.webgl.ArrayBuffer
 import org.khronos.webgl.Int8Array
-import org.w3c.dom.CloseEvent
-import org.w3c.dom.ErrorEvent
 import org.w3c.dom.WebSocket
-import org.w3c.xhr.ARRAYBUFFER
-import org.w3c.xhr.XMLHttpRequest
-import org.w3c.xhr.XMLHttpRequestResponseType
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
 
 val isNode: Boolean = js("typeof process !== 'undefined' && process.versions != null && process.versions.node != null") as Boolean
-
-// responseText is unreadable when responseType is "arraybuffer" (throws InvalidStateError);
-// decode the error body from xhr.response instead.
-internal fun XMLHttpRequest.errorBodyText(): String {
-    val response = this.response as? ArrayBuffer ?: return ""
-    return js("new TextDecoder().decode(response)") as String
-}
-
-private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<RpcResponse>) {
-    if (xhr.readyState == XMLHttpRequest.DONE) {
-        val headers = parseResponseHeaders(xhr.getAllResponseHeaders())
-
-        if (xhr.status / 100 == 2) {
-            coroutineContext.resume(RpcResponse(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>(), headers))
-        } else {
-            val status = Status.fromHTTPCode(xhr.status.toInt(), xhr.errorBodyText(), xhr.getResponseHeader(RPC_STATUS_HEADER))
-            coroutineContext.resumeWithException(RpcResponseException(xhr.responseURL, "POST", status.code, status.message))
-        }
-    }
-}
-
-private suspend fun httpPost(host: String, headers: Map<String, String>, path: String, secure: Boolean, data: ByteArray): RpcResponse = suspendCoroutine { c ->
-    val scheme = if (secure) "" else "http://"
-
-    val xhr = XMLHttpRequest()
-
-    xhr.onreadystatechange = { _ ->
-        statusHandler(xhr, c)
-    }
-    xhr.open("POST", "$scheme$host$path", true)
-    xhr.responseType = XMLHttpRequestResponseType.ARRAYBUFFER
-    xhr.setRequestHeader("Content-type", "application/proto")
-
-    for ((key, value) in headers) {
-        xhr.setRequestHeader(key, value)
-    }
-
-    xhr.send(data)
-}
 
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
 
@@ -65,7 +17,8 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         headers: Map<String, String>,
         request: ByteArray
     ): RpcResponse {
-        return httpPost(rpcHttpBaseUrl(serverPath), headers, if (useApiGateway) method.toApiGatewayPath("") else method.toPath(""), true, request)
+        val base = rpcHttpBaseUrl(serverPath)
+        return performJsHttpRequest(if (useApiGateway) method.toApiGatewayPath(base) else method.toPath(base), "POST", request, mapOf("Content-Type" to "application/proto") + headers)
     }
 
     private class WebSocketServerStream(private val socket: WebSocket) : RpcServerStream {
