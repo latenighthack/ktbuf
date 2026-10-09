@@ -10,11 +10,15 @@ import com.latenighthack.ktbuf.net.RpcServerStream
 
 @Suppress("EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 public actual class HttpRpcClient actual constructor(serverPath: String, useApiGateway: Boolean) : RpcClient {
+    private val lifecycle = com.latenighthack.ktbuf.net.RpcClientLifecycle()
+    actual fun close() = lifecycle.close()
+    actual suspend fun closeAndJoin() = lifecycle.closeAndJoin()
+
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
         headers: Map<String, String>,
         request: ByteArray
-    ): RpcResponse {
+    ): RpcResponse = lifecycle.call {
         throw RpcResponseException(method.toPath(""), "POST", Codes.UNIMPLEMENTED, "Built-in RPC transport is not supported on Linux; supply a custom RpcClient")
     }
 
@@ -26,7 +30,7 @@ public actual class HttpRpcClient actual constructor(serverPath: String, useApiG
         headers: Map<String, String>,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
-    ) {
+    ) : Unit = lifecycle.call {
         throw RpcResponseException(method.toPath(""), "WS", Codes.UNIMPLEMENTED, "Built-in RPC transport is not supported on Linux; supply a custom RpcClient")
     }
 

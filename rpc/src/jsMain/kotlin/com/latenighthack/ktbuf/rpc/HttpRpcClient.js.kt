@@ -11,14 +11,17 @@ import org.w3c.dom.WebSocket
 val isNode: Boolean = js("typeof process !== 'undefined' && process.versions != null && process.versions.node != null") as Boolean
 
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
+    private val lifecycle = com.latenighthack.ktbuf.net.RpcClientLifecycle()
+    actual fun close() = lifecycle.close()
+    actual suspend fun closeAndJoin() = lifecycle.closeAndJoin()
 
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,
         headers: Map<String, String>,
         request: ByteArray
-    ): RpcResponse {
+    ): RpcResponse = lifecycle.call {
         val base = rpcHttpBaseUrl(serverPath)
-        return performJsHttpRequest(if (useApiGateway) method.toApiGatewayPath(base) else method.toPath(base), "POST", request, mapOf("Content-Type" to "application/proto") + headers)
+        performJsHttpRequest(if (useApiGateway) method.toApiGatewayPath(base) else method.toPath(base), "POST", request, mapOf("Content-Type" to "application/proto") + headers)
     }
 
     private class WebSocketServerStream(private val socket: WebSocket) : RpcServerStream {
@@ -104,27 +107,29 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         headers: Map<String, String>,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
-    ) = coroutineScope {
-        require(headers.keys.none { it.equals("Sec-WebSocket-Protocol", true) }) { "RPC protocol header is reserved" }
-        val base = rpcWebSocketBaseUrl(serverPath)
-        val url = if (useApiGateway) method.toApiGatewayPath(base) else method.toPath(base)
-        val protocols = arrayOf(RPC_STREAM_PROTOCOL)
-        val socket = if (isNode) {
-            val socketConstructor = js("require('ws')")
-            val headerObject = js("({})")
-            headers.forEach { (name, value) -> headerObject[name] = value }
-            val configuration = js("({ maxPayload: 16777216, perMessageDeflate: false })")
-            configuration.headers = headerObject
-            js("new socketConstructor(url, protocols, configuration)").unsafeCast<WebSocket>()
-        } else {
-            if (headers.isNotEmpty()) throw RpcResponseException(url, "WS", Codes.UNIMPLEMENTED, "Browser WebSocket does not support custom handshake headers")
-            WebSocket(url, protocols)
+    ) = lifecycle.call {
+        coroutineScope {
+            require(headers.keys.none { it.equals("Sec-WebSocket-Protocol", true) }) { "RPC protocol header is reserved" }
+            val base = rpcWebSocketBaseUrl(serverPath)
+            val url = if (useApiGateway) method.toApiGatewayPath(base) else method.toPath(base)
+            val protocols = arrayOf(RPC_STREAM_PROTOCOL)
+            val socket = if (isNode) {
+                val socketConstructor = js("require('ws')")
+                val headerObject = js("({})")
+                headers.forEach { (name, value) -> headerObject[name] = value }
+                val configuration = js("({ maxPayload: 16777216, perMessageDeflate: false })")
+                configuration.headers = headerObject
+                js("new socketConstructor(url, protocols, configuration)").unsafeCast<WebSocket>()
+            } else {
+                if (headers.isNotEmpty()) throw RpcResponseException(url, "WS", Codes.UNIMPLEMENTED, "Browser WebSocket does not support custom handshake headers")
+                WebSocket(url, protocols)
+            }
+            val stream = WebSocketServerStream(socket)
+            try {
+                stream.awaitOpen()
+                readyCallback()
+                stream.block()
+            } finally { stream.dispose() }
         }
-        val stream = WebSocketServerStream(socket)
-        try {
-            stream.awaitOpen()
-            readyCallback()
-            stream.block()
-        } finally { stream.dispose() }
     }
 }

@@ -40,6 +40,19 @@ class WebSocketPlatformRegressionTests {
             } finally { job.cancelAndJoin() }
         }
     }
+    @Test fun disposingAClientCancelsAndJoinsItsActualSocket() = runBlocking<Unit> {
+        Peer(0).use { peer ->
+            val client = HttpRpcClient("127.0.0.1:${peer.listener.localPort}")
+            val operation = launch(Dispatchers.Default) { client.serverStreamingCall(RpcMethodSpecifier("p", "S", "M"), { receive() }, {}) }
+            try {
+                assertTrue(peer.opened.await(5, TimeUnit.SECONDS))
+                client.closeAndJoin()
+                withTimeout(2000) { operation.join() }
+                assertTrue(operation.isCompleted && operation.isCancelled)
+                assertTrue(peer.ended.await(1, TimeUnit.SECONDS), "client disposal retained its socket")
+            } finally { client.closeAndJoin(); operation.cancelAndJoin() }
+        }
+    }
     private class Peer(private val frames:Int):AutoCloseable {
         val listener=ServerSocket(0)
         val opened=CountDownLatch(1)

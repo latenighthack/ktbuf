@@ -17,4 +17,9 @@ public expect class HttpRpcClient(serverPath: String, useApiGateway: Boolean = f
     )
     override suspend fun serverStreamingCall(method: RpcMethodSpecifier, headers: Map<String, String>, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit)
 
+    /** Reject future calls and cancel every active operation without closing shared HTTP resources. */
+    fun close()
+    /** Also wait for owned call jobs and their cancellation cleanup. Call outside an active RPC. */
+    suspend fun closeAndJoin()
+
 }

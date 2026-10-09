@@ -10,6 +10,9 @@ android {
     namespace = "com.latenighthack.ktbuf.consumer"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     defaultConfig { minSdk = libs.versions.android.minSdk.get().toInt() }
+    // This unpublished fixture verifies compilation/packaging; AGP's bundled lint
+    // compiler predates our Kotlin metadata and is not an application release gate.
+    lint { checkReleaseBuilds = false }
 }
 dependencies {
     implementation(project(":rpc"))
