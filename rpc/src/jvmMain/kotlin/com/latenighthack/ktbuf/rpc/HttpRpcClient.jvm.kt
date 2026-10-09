@@ -13,7 +13,7 @@ import java.io.IOException
 
 @OptIn(ExperimentalCoroutinesApi::class)
 actual class HttpRpcClient actual constructor(private val serverPath: String, private val useApiGateway: Boolean) : RpcClient {
-    private val client: OkHttpClient = OkHttpClient()
+    private val client: OkHttpClient = defaultOkHttpClient
 
     actual override suspend fun unaryCall(
         method: RpcMethodSpecifier,

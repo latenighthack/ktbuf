@@ -11,7 +11,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
 actual class PlatformHttpClient: HttpClient {
-    private val client: OkHttpClient = OkHttpClient()
+    private val client: OkHttpClient = defaultOkHttpClient
 
     actual override suspend fun httpCall(url: String, method: String, request: ByteArray, headers: Map<String, String>): ByteArray {
         return suspendCancellableCoroutine { continuation ->
