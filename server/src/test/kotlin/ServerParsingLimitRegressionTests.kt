@@ -17,7 +17,8 @@ class ServerParsingLimitRegressionTests {
         try {
             val error=runCatching { withTimeout(3000) { HttpRpcClient(server.serverUrl).unaryCall(RpcMethodSpecifier("limits","Test","Unary"),emptyMap(),ByteArray(100000)) } }.exceptionOrNull()
             assertTrue(error is RpcResponseException)
-            assertEquals(Codes.RESOURCE_EXHAUSTED,error.code)
+            assertEquals(Codes.OUT_OF_RANGE,error.code)
+            assertFalse(error.retriable())
             assertEquals(0,parses.get())
         } finally { server.stop() }
     }

@@ -121,6 +121,7 @@ fun Status.Companion.fromWSCode(wsCode: Int, message: String?): Status {
     val code = when (wsCode) {
         1000 -> Codes.OK
         1001 -> Codes.UNAVAILABLE
+        1009 -> Codes.OUT_OF_RANGE
         in 4000 until 5000 -> {
             val codeVal = wsCode - 4000
             Codes.values().firstOrNull { it.value == codeVal } ?: Codes.UNKNOWN

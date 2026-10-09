@@ -16,6 +16,6 @@ internal class RpcInboundBuffer(private val maxBytes: Int = MAX_RPC_MESSAGE_BYTE
         queued.update { it - bytes.size }
         return false
     }
-    suspend fun receive(): ByteArray = channel.receiveCatching().getOrThrow().also { bytes -> queued.update { it - bytes.size } }
+    suspend fun receive(): ByteArray = channel.receive().also { bytes -> queued.update { it - bytes.size } }
     fun close(cause: Throwable? = null) { channel.close(cause) }
 }

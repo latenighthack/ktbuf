@@ -278,4 +278,22 @@ class TransportRoundTripTests {
         assertEquals(payload, received.single().fString, "the large frame arrived intact")
         assertEquals(10, received.single().fInt32)
     }
+    @Test fun typedBidiPreservesPermanentServerFailures() = runTestWithServer({
+        attachConformance(object : ConformanceServer by ConformanceTestServer() {
+            override fun bidi(context: GrpcRequestContext, request: Flow<AllTypes>): Flow<StreamControlEvent<AllTypes>> = flow {
+                throw RpcResponseException("", "POST", Codes.OUT_OF_RANGE, "deterministic packet limit")
+            }
+        })
+    }) { server, _ ->
+        val client = HttpRpcClient(server.serverUrl)
+        try {
+            val service = ConformanceServiceRpc(client)
+            val failure = kotlin.test.assertFailsWith<RpcResponseException> { realTime(3_000) {
+                service.bidi(flow { emit(AllTypes()); awaitCancellation() }).toList()
+            } }
+            assertEquals(Codes.OUT_OF_RANGE, failure.code)
+            kotlin.test.assertFalse(failure.retriable())
+        } finally { client.closeAndJoin() }
+    }
+
 }

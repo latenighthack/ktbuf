@@ -181,6 +181,7 @@ class RpcWireGoldenTests {
     fun webSocketCloseCodesMapToGrpcCodes() {
         assertEquals(Codes.OK, Status.fromWSCode(1000, null).code)
         assertEquals(Codes.UNAVAILABLE, Status.fromWSCode(1001, null).code)
+        assertEquals(Codes.OUT_OF_RANGE, Status.fromWSCode(1009, null).code)
         assertEquals(Codes.UNKNOWN, Status.fromWSCode(1006, null).code)
 
         // The 4000-4999 private range carries the gRPC code as an offset from 4000.

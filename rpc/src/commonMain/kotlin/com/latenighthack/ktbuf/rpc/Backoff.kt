@@ -1,6 +1,9 @@
 package com.latenighthack.ktbuf.rpc
 
 import com.latenighthack.ktbuf.net.RpcResponseException
+import com.latenighthack.ktbuf.ProtobufOutputLimitException
+import com.latenighthack.ktbuf.ProtobufLimitException
+import com.latenighthack.ktbuf.bytes.ByteArrayLimitException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -51,7 +54,11 @@ interface BackoffContext {
         val DEFAULT_CANCEL_CHANNEL: ReceiveChannel<Unit> get() = Channel()
         val DEFAULT_RESET_CHANNEL: ReceiveChannel<Unit> get() = Channel()
         val DEFAULT_EXCEPTION_HANDLER: (Throwable) -> Boolean = {
-            (it as? RpcResponseException)?.retriable() ?: true
+            when (it) {
+                is ProtobufOutputLimitException, is ProtobufLimitException, is ByteArrayLimitException -> false
+                is RpcResponseException -> it.retriable()
+                else -> true
+            }
         }
     }
 

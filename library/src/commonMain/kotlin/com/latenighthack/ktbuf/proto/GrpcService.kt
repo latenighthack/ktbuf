@@ -68,10 +68,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
 
                         bytes
                     } catch (ex: ClosedReceiveChannelException) {
-                        if (ex.cause != null) {
-                            this@channelFlow.cancel(ex.cause!!.toString(), ex.cause!!)
-                        }
-
+                        streamCloseFailure(ex)?.let { throw it }
                         return@serverStreamingCall
                     }
 
@@ -79,14 +76,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
                     val reader = ScopedProtobufReader(readBytes)
                     readBytes.insert(responseBytes)
 
-                    val response = try {
-                        val resp = readResponse(reader)
-
-                        resp
-                    } catch (ex: Throwable) {
-                        this@channelFlow.cancel("failed to unmarshal response", ex)
-                        return@serverStreamingCall
-                    }
+                    val response = readResponse(reader)
 
                     this@channelFlow.send(response)
                 }
@@ -198,23 +188,26 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
 
                         readBytes.insert(bytes)
 
-                        val response = try {
-                            val resp = readResponse(reader)
-
-                            resp
-                        } catch (ex: Throwable) {
-                            this@channelFlow.cancel("failed to unmarshal response", ex)
-                            return@serverStreamingCall
-                        }
+                        val response = readResponse(reader)
 
                         this@channelFlow.send(response)
                     }
-                } catch (ex: Throwable) {
+                } catch (closed: ClosedReceiveChannelException) {
+                    streamCloseFailure(closed)?.let { throw it }
                 } finally {
-                    requestJob.cancel()
-                    closeOutbound()
+                    withContext(NonCancellable) { requestJob.cancelAndJoin(); closeOutbound() }
                 }
             }, readyCallback
         )
     }
+}
+
+/** Coroutine stacktrace recovery can wrap a normal closed-channel exception as its own cause. */
+private fun streamCloseFailure(closed: ClosedReceiveChannelException): Throwable? {
+    var cause: Throwable? = closed.cause
+    repeat(64) {
+        if (cause !is ClosedReceiveChannelException) return cause
+        cause = cause?.cause
+    }
+    return cause
 }
