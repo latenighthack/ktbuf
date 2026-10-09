@@ -28,9 +28,9 @@ jobs:
         include:
         - target: :library:jvmTest :conformance:jvmTest :patch:jvmTest :rpc:jvmTest
           os: ubuntu-latest
-        - target: :library:testDebugUnitTest :conformance:testDebugUnitTest :patch:testDebugUnitTest :rpc:testDebugUnitTest
+        - target: :library:testDebugUnitTest :conformance:testDebugUnitTest :patch:testDebugUnitTest :rpc:testDebugUnitTest :android-consumer:assembleDebug
           os: ubuntu-latest
-        - target: :library:testReleaseUnitTest :conformance:testReleaseUnitTest :patch:testReleaseUnitTest :rpc:testReleaseUnitTest
+        - target: :library:testReleaseUnitTest :conformance:testReleaseUnitTest :patch:testReleaseUnitTest :rpc:testReleaseUnitTest :android-consumer:assembleRelease
           os: ubuntu-latest
         - target: :library:jsNodeTest :conformance:jsNodeTest :patch:jsNodeTest :rpc:jsNodeTest
           os: ubuntu-latest

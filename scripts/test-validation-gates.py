@@ -8,6 +8,7 @@ root = Path(__file__).resolve().parents[1]
 ci = yaml.safe_load((root / '.github/workflows/gradle.yml').read_text())
 release = yaml.safe_load((root / '.github/workflows/release.yml').read_text())
 required = {
+    ':android-consumer:assembleDebug', ':android-consumer:assembleRelease',
     ':rpc:jvmTest', ':rpc:testDebugUnitTest', ':rpc:testReleaseUnitTest',
     ':rpc:jsNodeTest', ':rpc:jsBrowserTest', ':rpc:macosArm64Test', ':rpc:linuxX64Test',
     ':patch:jvmTest', ':patch:testDebugUnitTest', ':patch:jsNodeTest', ':patch:macosArm64Test',

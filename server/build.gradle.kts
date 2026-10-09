@@ -25,6 +25,7 @@ dependencies {
     implementation(libs.ktor.server.cors)
     implementation(libs.ktor.server.websockets)
     implementation(libs.okhttp3.okhttp)
+    implementation(libs.okio)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(project(":test"))

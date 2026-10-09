@@ -2,13 +2,15 @@
 agp = "8.2.2"
 kotlin = "2.3.10"
 kotlinx = "1.9.0"
-okhttp = "5.5.0"
+okhttp = "4.12.0"
+okio = "3.18.1"
 android-minSdk = "24"
 android-compileSdk = "34"
 ktor = "3.0.2"
 protobuf = "0.9.4"
 
 [libraries]
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 okhttp3-okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx" }
@@ -30,3 +32,6 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 androidLibrary = { id = "com.android.library", version.ref = "agp" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 protobuf = { id = "com.google.protobuf", version.ref = "protobuf" }
+
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

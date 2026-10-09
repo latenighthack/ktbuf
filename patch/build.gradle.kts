@@ -57,6 +57,7 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation(libs.okhttp3.okhttp)
+                implementation(libs.okio)
             }
         }
     }

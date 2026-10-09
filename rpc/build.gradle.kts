@@ -93,7 +93,9 @@ kotlin {
 
         val jvmMain by getting {
             dependencies {
+                // Patched 4.x preserves the declared Android compile-SDK floor.
                 api(libs.okhttp3.okhttp)
+                api(libs.okio)
             }
         }
 
@@ -110,6 +112,7 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 implementation(libs.okhttp3.okhttp)
+                implementation(libs.okio)
             }
         }
     }
