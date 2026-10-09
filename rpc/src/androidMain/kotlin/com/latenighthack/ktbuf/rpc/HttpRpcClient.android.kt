@@ -70,8 +70,12 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         }
     }
 
+    actual override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) =
+        serverStreamingCall(method, emptyMap(), block, readyCallback)
+
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
+        headers: Map<String, String>,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     ) = coroutineScope {
@@ -125,7 +129,10 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             override suspend fun closeInbound() { inbound.close() }
         }
         try {
-            socket = client.newWebSocket(Request.Builder().url(url).header("Sec-WebSocket-Protocol", RPC_STREAM_PROTOCOL).build(), object : WebSocketListener() {
+            socket = client.newWebSocket(Request.Builder().url(url).apply { headers.forEach { (name, value) ->
+                require(!name.equals("Sec-WebSocket-Protocol", true)) { "RPC protocol header is reserved" }
+                header(name, value)
+            } }.header("Sec-WebSocket-Protocol", RPC_STREAM_PROTOCOL).build(), object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     halfCloseSupported = response.header("Sec-WebSocket-Protocol") == RPC_STREAM_PROTOCOL
                     ready.complete(Unit)

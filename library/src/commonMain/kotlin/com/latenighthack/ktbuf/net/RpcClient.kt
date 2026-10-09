@@ -172,27 +172,26 @@ class InterceptingRpcClient(
         return wrappedCall(method, headers, request)
     }
 
-    override suspend fun serverStreamingCall(
-        method: RpcMethodSpecifier,
-        block: suspend RpcServerStream.() -> Unit,
-        readyCallback: () -> Unit
-    ) {
-        rpcClient.serverStreamingCall(
-            method,
-            {
-                val thisServerStream = this
-                val stream = interceptors.fold(thisServerStream) { nextStream, interceptor ->
-                    if (interceptor !is StreamingRpcInterceptor) {
-                        nextStream
-                    } else {
-                        InterceptedServerStream(method, interceptor, nextStream)
-                    }
-                }
+    override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) =
+        serverStreamingCall(method, emptyMap(), block, readyCallback)
 
+    override suspend fun serverStreamingCall(method: RpcMethodSpecifier, headers: Map<String, String>, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) {
+        val open: suspend (RpcMethodSpecifier, Map<String, String>) -> Unit = { actualMethod, actualHeaders ->
+            rpcClient.serverStreamingCall(actualMethod, actualHeaders, {
+                val stream = interceptors.fold(this) { next, interceptor ->
+                    if (interceptor is StreamingRpcInterceptor) InterceptedServerStream(actualMethod, interceptor, next) else next
+                }
                 stream.block()
-            }, readyCallback
-        )
+            }, readyCallback)
+        }
+        val intercepted = interceptors.fold(open) { next, interceptor ->
+            if (interceptor is StreamingRpcInterceptor) {
+                { actualMethod, actualHeaders -> interceptor.interceptOpen(actualMethod, actualHeaders, next) }
+            } else next
+        }
+        intercepted(method, headers)
     }
+
 }
 
 class RpcResponseException(val path: String, val verb: String, val code: Codes, val errorMessage: String, cause: Throwable? = null) : Exception("$verb - $code: $path (${errorMessage.trim()})", cause) {
@@ -234,4 +233,10 @@ public interface RpcClient {
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     )
+    /** Compatible default for transports that implement the original streaming API. */
+    suspend fun serverStreamingCall(method: RpcMethodSpecifier, headers: Map<String, String>, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) {
+        if (headers.isNotEmpty()) throw RpcResponseException(method.toPath(""), "WS", Codes.UNIMPLEMENTED, "Transport does not support streaming headers")
+        serverStreamingCall(method, block, readyCallback)
+    }
+
 }

@@ -151,8 +151,12 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         }
     }
 
+    actual override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) =
+        serverStreamingCall(method, emptyMap(), block, readyCallback)
+
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
+        headers: Map<String, String>,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     ) {
@@ -166,7 +170,15 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         } else {
             method.toPath(serverWsUrl)
         }
-        val webSocket = WebSocket(wsUrl)
+        val webSocket = if (isNode) {
+            val socketConstructor = js("require('websocket').w3cwebsocket")
+            val headerObject = js("({})")
+            headers.forEach { (name, value) -> headerObject[name] = value }
+            js("new socketConstructor(wsUrl, undefined, undefined, headerObject)").unsafeCast<WebSocket>()
+        } else {
+            if (headers.isNotEmpty()) throw RpcResponseException(wsUrl, "WS", Codes.UNIMPLEMENTED, "Browser WebSocket does not support custom handshake headers")
+            WebSocket(wsUrl)
+        }
         val stream = WebSocketServerStream(webSocket, readyCallback)
 
         stream.block()

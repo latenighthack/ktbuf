@@ -15,4 +15,6 @@ public expect class HttpRpcClient(serverPath: String, useApiGateway: Boolean = f
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     )
+    override suspend fun serverStreamingCall(method: RpcMethodSpecifier, headers: Map<String, String>, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit)
+
 }

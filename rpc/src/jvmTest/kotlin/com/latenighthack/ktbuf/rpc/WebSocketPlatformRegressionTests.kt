@@ -13,6 +13,21 @@ import kotlin.concurrent.thread
 import kotlin.test.*
 
 class WebSocketPlatformRegressionTests {
+    @Test fun streamingOpenHeadersAndMethodTransformsReachTheActualHandshake() = runBlocking<Unit> {
+        Peer(0).use { peer ->
+            val interceptor = object : StreamingRpcInterceptor {
+                override suspend fun interceptOpen(method: RpcMethodSpecifier, headers: Map<String, String>, next: suspend (RpcMethodSpecifier, Map<String, String>) -> Unit) =
+                    next(method.copy(methodName = "Changed"), headers + ("Authorization" to "regression-token"))
+                override suspend fun interceptSend(method: RpcMethodSpecifier, request: ByteArray, next: suspend (RpcMethodSpecifier, ByteArray) -> Unit) = next(method, request)
+                override suspend fun interceptReceive(method: RpcMethodSpecifier, next: suspend (RpcMethodSpecifier) -> ByteArray) = next(method)
+            }
+            InterceptingRpcClient(HttpRpcClient("127.0.0.1:${peer.listener.localPort}"), listOf(interceptor)).serverStreamingCall(
+                RpcMethodSpecifier("p", "S", "M"), mapOf("X-Caller" to "preserved"), {}, {})
+            assertEquals("/api/p.S/Changed", peer.path)
+            assertEquals("regression-token", peer.headers["authorization"])
+            assertEquals("preserved", peer.headers["x-caller"])
+        }
+    }
     @Test fun explicitSchemesAndGatewayParametersReachThePeerIntact() = runBlocking<Unit> {
         for (scheme in listOf("http://", "ws://")) Peer(0).use { peer ->
             val job = launch(Dispatchers.Default) {
@@ -30,6 +45,7 @@ class WebSocketPlatformRegressionTests {
         val opened=CountDownLatch(1)
         val ended=CountDownLatch(1)
         @Volatile var path=""
+        @Volatile var headers: Map<String, String> = emptyMap()
         @Volatile var socket:Socket?=null
         val worker=thread(isDaemon=true) {
             try {
@@ -41,6 +57,7 @@ class WebSocketPlatformRegressionTests {
                     while(!header.endsWith("\r\n\r\n")) { val byte=input.read(); if(byte<0) return@use; header.append(byte.toChar()) }
                     val lines=header.toString().split("\r\n")
                     path=lines[0].split(" ")[1]
+                    headers = lines.drop(1).filter { ':' in it }.associate { it.substringBefore(':').lowercase() to it.substringAfter(':').trim() }
                     val key=lines.first { it.startsWith("Sec-WebSocket-Key:",true) }.substringAfter(':').trim()
                     val accept=Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").toByteArray()))
                     val protocol=lines.firstOrNull { it.startsWith("Sec-WebSocket-Protocol:",true) }?.substringAfter(':')?.trim()

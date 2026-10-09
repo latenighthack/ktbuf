@@ -114,8 +114,12 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         task.resume()
     }
 
+    actual override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) =
+        serverStreamingCall(method, emptyMap(), block, readyCallback)
+
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
+        headers: Map<String, String>,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     ) {
@@ -126,7 +130,9 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         }
 
         val requestUrl = NSURL.URLWithString(url)!!
-        val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl)
+        val urlRequest = NSMutableURLRequest.requestWithURL(requestUrl).apply {
+            headers.forEach { (name, value) -> setValue(value, forHTTPHeaderField = name) }
+        }
 
         val webSocketTask = NSURLSession.sharedSession.webSocketTaskWithRequest(urlRequest)
         // Foundation defaults to 1 MiB, smaller than ordinary streamed RPC

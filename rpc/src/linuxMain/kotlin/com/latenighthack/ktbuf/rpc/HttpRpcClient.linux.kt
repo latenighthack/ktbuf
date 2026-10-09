@@ -15,8 +15,12 @@ public actual class HttpRpcClient actual constructor(serverPath: String, useApiG
         TODO("Not yet implemented")
     }
 
+    actual override suspend fun serverStreamingCall(method: RpcMethodSpecifier, block: suspend RpcServerStream.() -> Unit, readyCallback: () -> Unit) =
+        serverStreamingCall(method, emptyMap(), block, readyCallback)
+
     actual override suspend fun serverStreamingCall(
         method: RpcMethodSpecifier,
+        headers: Map<String, String>,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
     ) {
