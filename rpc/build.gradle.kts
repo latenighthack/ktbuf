@@ -51,7 +51,7 @@ kotlin {
 
         val jsMain by getting {
             dependencies {
-                implementation(npm("websocket", ">=1.0.32"))
+                implementation(npm("ws", "8.22.0"))
             }
         }
 

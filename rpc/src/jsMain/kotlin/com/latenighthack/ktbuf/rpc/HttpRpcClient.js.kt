@@ -2,16 +2,13 @@ package com.latenighthack.ktbuf.rpc
 
 import com.latenighthack.ktbuf.net.*
 import com.latenighthack.ktbuf.proto.*
-import kotlinx.browser.window
-import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import org.khronos.webgl.ArrayBuffer
 import org.khronos.webgl.Int8Array
 import org.w3c.dom.CloseEvent
 import org.w3c.dom.ErrorEvent
 import org.w3c.dom.WebSocket
-import org.w3c.files.Blob
-import org.w3c.files.FileReader
 import org.w3c.xhr.ARRAYBUFFER
 import org.w3c.xhr.XMLHttpRequest
 import org.w3c.xhr.XMLHttpRequestResponseType
@@ -20,7 +17,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
-val isNode: Boolean = js("typeof window === 'undefined'") as Boolean
+val isNode: Boolean = js("typeof process !== 'undefined' && process.versions != null && process.versions.node != null") as Boolean
 
 // responseText is unreadable when responseType is "arraybuffer" (throws InvalidStateError);
 // decode the error body from xhr.response instead.
@@ -80,74 +77,78 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         return httpPost(rpcHttpBaseUrl(serverPath), headers, if (useApiGateway) method.toApiGatewayPath("") else method.toPath(""), true, request)
     }
 
-    private class WebSocketServerStream(private val webSocket: WebSocket, private val readyCallback: () -> Unit) : RpcServerStream {
-        private val receiveChannel = Channel<ByteArray>()
-        private var doOnReady: (() -> Unit)? = null
-        private var isReady = false
-
+    private class WebSocketServerStream(private val socket: WebSocket) : RpcServerStream {
+        private val inbound = Channel<ByteArray>(64)
+        private val ready = CompletableDeferred<Unit>()
+        private val byteLimit = com.latenighthack.ktbuf.ProtobufLimits().maxMessageBytes
+        private var queuedBytes = 0
+        private var outboundClosed = false
+        private var failure: Throwable? = null
+        private fun error(code: Codes, message: String) = RpcResponseException(socket.url, "WS", code, message)
+        private fun fail(cause: Throwable) {
+            if (failure == null) failure = cause
+            ready.completeExceptionally(cause)
+            inbound.close(cause)
+            socket.close()
+        }
         init {
-            webSocket.onopen = {
-                isReady = true
-                doOnReady?.invoke()
-
-                readyCallback()
+            socket.asDynamic().binaryType = "arraybuffer"
+            socket.onopen = { ready.complete(Unit); Unit }
+            socket.onclose = { event ->
+                val closed = event.asDynamic()
+                val status = Status.fromWSCode(closed.code as? Int ?: 1006, closed.reason as? String)
+                val cause = if (status.code == Codes.OK) null else error(status.code, status.message)
+                if (cause != null && failure == null) failure = cause
+                if (!ready.isCompleted) ready.completeExceptionally(cause ?: error(Codes.UNAVAILABLE, "Socket closed before opening"))
+                inbound.close(cause)
+                Unit
             }
-            webSocket.onclose = {
-                window.setTimeout({
-                    receiveChannel.close(RpcResponseException(webSocket.url, "WS", Status.fromWSCode((it as CloseEvent).code.toInt(), it.reason).code, (it as CloseEvent).reason))
-                }, 20)
+            socket.onerror = { event ->
+                fail(error(Codes.UNAVAILABLE, event.asDynamic().message as? String ?: "WebSocket transport failed"))
             }
-            webSocket.onerror = {
-                window.setTimeout({
-                    receiveChannel.close(RpcResponseException(webSocket.url, "WS", Codes.UNKNOWN, (it as ErrorEvent).message))
-                }, 20)
-            }
-            webSocket.onmessage = { event ->
-                if (js("event.data instanceof ArrayBuffer") as Boolean) {
-                    val data = Int8Array(event.data as ArrayBuffer).unsafeCast<ByteArray>()
-
-                    receiveChannel.trySend(data)
-                } else {
-                    val reader = FileReader()
-
-                    reader.onloadend = {
-                        val buffer = reader.result as ArrayBuffer
-                        val data = Int8Array(buffer).unsafeCast<ByteArray>()
-
-                        receiveChannel.trySend(data)
+            socket.onmessage = { event ->
+                val data = event.data
+                if (!(js("data instanceof ArrayBuffer") as Boolean)) fail(error(Codes.INVALID_ARGUMENT, "Expected a binary RPC response"))
+                else {
+                    val bytes = Int8Array(data as ArrayBuffer).unsafeCast<ByteArray>()
+                    if (bytes.size > byteLimit - queuedBytes) fail(error(Codes.RESOURCE_EXHAUSTED, "RPC response queue exceeds byte limit"))
+                    else {
+                        queuedBytes += bytes.size
+                        if (!inbound.trySend(bytes).isSuccess) {
+                            queuedBytes -= bytes.size
+                            if (!inbound.isClosedForSend) fail(error(Codes.RESOURCE_EXHAUSTED, "RPC response queue is full"))
+                        }
                     }
-
-                    reader.readAsArrayBuffer(event.data as Blob)
                 }
             }
         }
-
-        @OptIn(InternalCoroutinesApi::class)
-        override suspend fun receive(): ByteArray {
-            val receiveOrClosed = receiveChannel.receiveCatching()
-
-            if (!receiveOrClosed.isSuccess) {
-                throw Exception("Closed during receive")
-            }
-
-            return receiveOrClosed.getOrNull()!!
+        suspend fun awaitOpen() { ready.await() }
+        override suspend fun receive(): ByteArray = inbound.receive().also { queuedBytes -= it.size }
+        private fun checkWritable() {
+            failure?.let { throw it }
+            if (socket.readyState.toInt() != 1) throw error(Codes.UNAVAILABLE, "WebSocket is not open")
+            check(!outboundClosed) { "Request stream is closed" }
         }
-
         override suspend fun send(bytes: ByteArray) {
-            doOnReady = {
-                webSocket.send(Int8Array(bytes.toTypedArray()))
-            }
-
-            if (isReady) {
-                doOnReady?.invoke()
-            }
+            ready.await(); checkWritable()
+            val pendingBytes = socket.bufferedAmount.toDouble()
+            if (bytes.size > byteLimit || pendingBytes + bytes.size > byteLimit) throw error(Codes.RESOURCE_EXHAUSTED, "RPC outgoing queue exceeds byte limit")
+            socket.send(bytes.unsafeCast<Int8Array>())
         }
-
         override suspend fun closeOutbound() {
+            ready.await()
+            if (outboundClosed) return
+            checkWritable()
+            if (socket.protocol != RPC_STREAM_PROTOCOL) throw error(Codes.UNIMPLEMENTED, "Peer does not support request half-close")
+            socket.send(RPC_REQUESTS_END)
+            outboundClosed = true
         }
-
-        override suspend fun closeInbound() {
-            receiveChannel.close()
+        override suspend fun closeInbound() { inbound.cancel(); socket.close() }
+        fun dispose() {
+            // onclose remains installed to observe termination; it never touches browser-only globals.
+            socket.onmessage = null
+            inbound.cancel()
+            socket.close()
         }
     }
 
@@ -159,28 +160,27 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         headers: Map<String, String>,
         block: suspend RpcServerStream.() -> Unit,
         readyCallback: () -> Unit
-    ) {
-        if (isNode) {
-            js("global.WebSocket = require('websocket').w3cwebsocket")
-        }
-
-        val serverWsUrl = rpcWebSocketBaseUrl(serverPath)
-        val wsUrl = if (useApiGateway) {
-            method.toApiGatewayPath(serverWsUrl)
-        } else {
-            method.toPath(serverWsUrl)
-        }
-        val webSocket = if (isNode) {
-            val socketConstructor = js("require('websocket').w3cwebsocket")
+    ) = coroutineScope {
+        require(headers.keys.none { it.equals("Sec-WebSocket-Protocol", true) }) { "RPC protocol header is reserved" }
+        val base = rpcWebSocketBaseUrl(serverPath)
+        val url = if (useApiGateway) method.toApiGatewayPath(base) else method.toPath(base)
+        val protocols = arrayOf(RPC_STREAM_PROTOCOL)
+        val socket = if (isNode) {
+            val socketConstructor = js("require('ws')")
             val headerObject = js("({})")
             headers.forEach { (name, value) -> headerObject[name] = value }
-            js("new socketConstructor(wsUrl, undefined, undefined, headerObject)").unsafeCast<WebSocket>()
+            val configuration = js("({ maxPayload: 16777216, perMessageDeflate: false })")
+            configuration.headers = headerObject
+            js("new socketConstructor(url, protocols, configuration)").unsafeCast<WebSocket>()
         } else {
-            if (headers.isNotEmpty()) throw RpcResponseException(wsUrl, "WS", Codes.UNIMPLEMENTED, "Browser WebSocket does not support custom handshake headers")
-            WebSocket(wsUrl)
+            if (headers.isNotEmpty()) throw RpcResponseException(url, "WS", Codes.UNIMPLEMENTED, "Browser WebSocket does not support custom handshake headers")
+            WebSocket(url, protocols)
         }
-        val stream = WebSocketServerStream(webSocket, readyCallback)
-
-        stream.block()
+        val stream = WebSocketServerStream(socket)
+        try {
+            stream.awaitOpen()
+            readyCallback()
+            stream.block()
+        } finally { stream.dispose() }
     }
 }
