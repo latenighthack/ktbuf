@@ -3,26 +3,27 @@ package com.latenighthack.ktbuf.bytes
 import kotlin.math.max
 
 /** Offsets address the unread portion. reset rewinds; clear discards all data. */
-internal class ConcreteLinkedByteArray(bufferSize: Int = defaultBufferSize) : MutableLinkedByteArray {
+internal class ConcreteLinkedByteArray(bufferSize: Int = defaultBufferSize, private val maxSize: Int = DEFAULT_BYTE_ARRAY_LIMIT) : MutableLinkedByteArray {
     internal companion object {
         const val defaultBufferSize = 10 * 2048
     }
-    private var buffer = ByteArray(bufferSize.also { require(it >= 0) })
+    private var buffer = ByteArray(minOf(bufferSize, maxSize).also { require(bufferSize >= 0 && maxSize >= 0) })
     private var cachedSize = 0
     private var tipOffset = 0
     override val size: Int get() = cachedSize - tipOffset
 
     private fun capacity(target: Int) {
+        if (target > maxSize) throw ByteArrayLimitException("Byte buffer limit exceeded")
         if (target > buffer.size) {
             val grown = (buffer.size.toLong() * 4 / 3).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-            buffer = buffer.copyOf(max(target, grown))
+            buffer = buffer.copyOf(max(target, grown).coerceAtMost(maxSize))
         }
     }
     override fun write(byte: Byte, destinationOffset: Int) = write(byteArrayOf(byte), 0, destinationOffset, 1)
     override fun write(bytes: ByteArray, sourceOffset: Int, destinationOffset: Int, length: Int) {
         checkRange(bytes.size, sourceOffset, length)
         checkRange(size, destinationOffset, 0)
-        require(length <= Int.MAX_VALUE - tipOffset - destinationOffset) { "Buffer size overflow" }
+        if (length.toLong() + tipOffset + destinationOffset > maxSize) throw ByteArrayLimitException("Byte buffer limit or size overflow")
         val destination = tipOffset + destinationOffset
         val target = max(cachedSize, destination + length)
         capacity(target)
@@ -32,7 +33,7 @@ internal class ConcreteLinkedByteArray(bufferSize: Int = defaultBufferSize) : Mu
     override fun insert(bytes: ByteArray, sourceOffset: Int, destinationOffset: Int, length: Int) {
         checkRange(bytes.size, sourceOffset, length)
         checkRange(size, destinationOffset, 0)
-        require(length <= Int.MAX_VALUE - cachedSize) { "Buffer size overflow" }
+        if (length.toLong() + cachedSize > maxSize) throw ByteArrayLimitException("Byte buffer limit or size overflow")
         val destination = tipOffset + destinationOffset
         val target = cachedSize + length
         capacity(target)
