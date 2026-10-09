@@ -117,8 +117,8 @@ class ScopedProtobufReader private constructor(
     }
 
     override fun skipField(): ByteArray {
-        val result = MutableLinkedByteArray(32)
-        skipFieldInto(ScopedProtobufWriter(result), 0)
+        val result = MutableLinkedByteArray(32, maxSize = budget.limits.maxMessageBytes)
+        skipFieldInto(ScopedProtobufWriter(result, ProtobufOutputLimits(budget.limits.maxMessageBytes, budget.limits.maxDepth, budget.limits.maxWork)), 0)
         return result.toByteArray()
     }
 
@@ -272,12 +272,13 @@ class ProtobufInputStream(
     private val bufferSize: Int = 2024,
     private val limits: ProtobufLimits = ProtobufLimits()
 ) {
-    private val input = MutableLinkedByteArray(minOf(bufferSize, limits.maxMessageBytes))
+    private val input = MutableLinkedByteArray(minOf(bufferSize, limits.maxMessageBytes), maxSize = limits.maxMessageBytes)
     private var consumed = 0
 
     fun addBytes(bytes: ByteArray) {
         if (bytes.size > limits.maxMessageBytes - input.size) throw ProtobufLimitException("Protobuf message byte limit exceeded")
-        if (consumed > 0 && consumed >= maxOf(input.size, minOf(bufferSize, limits.maxMessageBytes))) {
+        if (consumed > 0 && (consumed >= maxOf(input.size, minOf(bufferSize, limits.maxMessageBytes)) ||
+                consumed.toLong() + input.size + bytes.size > limits.maxMessageBytes)) {
             val unread = input.toByteArray()
             input.clear()
             input.write(unread)

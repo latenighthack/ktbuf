@@ -28,7 +28,8 @@ internal suspend fun performNativeHttpRequest(url: String, method: String, bytes
             val http = response as? NSHTTPURLResponse ?: throw RpcResponseException(url, method, Codes.UNAVAILABLE, "Missing HTTP response")
             val result = data?.toByteArray() ?: byteArrayOf()
             val responseHeaders = http.allHeaderFields.mapKeys { it.key.toString() }.mapValues { it.value.toString() }
-            if (http.statusCode.toInt() !in 200..299) {
+            val statusHeader = responseHeaders.rpcHeader(RPC_STATUS_HEADER)
+            if (http.statusCode.toInt() !in 200..299 || (statusHeader != null && Status.fromHTTPCode(http.statusCode.toInt(), null, statusHeader).code != Codes.OK)) {
                 val status = Status.fromHTTPCode(http.statusCode.toInt(), result.decodeToString(), responseHeaders.rpcHeader(RPC_STATUS_HEADER))
                 throw RpcResponseException(url, method, status.code, status.message)
             }

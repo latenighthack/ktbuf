@@ -1,0 +1,15 @@
+# Lockers F33 / F38 — finite protobuf output and byte storage
+
+Baseline output regressions proved the default writer could serialize beyond 16 MiB and scoped length arithmetic silently wrapped Int.MAX_VALUE before writing (`/tmp/ktbuf-output-repro.log`). These repros use bounded allocations (a reusable 1 KiB chunk and a synthetic logical length), not an OOM experiment.
+
+ProtobufOutputLimits defaults to 16 MiB encoded bytes, depth 64, and one million write operations. All nested scopes share its budget. UTF-8 size is counted before encoding/copying strings; byte fields include tag and length overhead in preflight. Buffer growth and nested length-prefix insertion check long arithmetic before allocation or copying. A failed stream remains failed even if its encoder catches the exception, so partial packets cannot escape. Output failures use ProtobufOutputLimitException.
+
+Generic linked byte storage also has a finite 16 MiB default, configurable through additive maxSize overloads. Allocation/growth clamps to that budget and capacity rejection leaves existing data intact (ByteArrayLimitException). Reader compaction now respects a finite physical buffer while preserving incremental/custom-limit behavior. Existing constructor, function and companion encode signatures are retained for compiled consumers.
+
+Seven output regressions cover default bounds, tiny exact limits, nested shared budgets/backpatch expansion, UTF-8 expansion and replacement encoding, explicit storage bounds/huge requested initial buffers, zero budgets, checked integer overflow, depth/work limits, and caught failure poisoning. Full existing wire goldens pass unchanged.
+
+Validation `/tmp/ktbuf-output-platforms.log`: library/RPC JVM and Node suites passed; Android library/RPC compilation passed; iOS simulator library tests and RPC compilation passed. Local immutable publication and Fullhouse/Lockers consumer verification use a new version after this source commit; no external release is authorized.
+
+Transport follow-up: deterministic input/output limits now report OUT_OF_RANGE (HTTP400 with explicit marker; WebSocket4011), while temporary quota RPC RESOURCE_EXHAUSTED remains retriable. Configured server protobuf limits also apply to response writers. Malformed protobufs map to INVALID_ARGUMENT; standard oversized WebSocket frame close1009 maps to OUT_OF_RANGE. Backoff never retries typed local parser/writer/buffer limit failures.
+
+The real tiny-limit unary/server-stream/bidi repro failed before the transport boundary change (`/tmp/ktbuf-output-boundary-repro.log`). Typed service support now propagates RPC/protobuf/cancellation failures rather than swallowing them in Bidi. Normal channel EOF drains frames and unwraps only closed-channel stacktrace-recovery causes; existing graceful streaming tests exposed that bug and now pass. New typed Bidi regression preserves permanent server failure. Full library/RPC/server JVM, Node, Android compilation and iOS tests/compilation passed (`/tmp/ktbuf-output-final-platforms.log`).

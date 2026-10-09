@@ -205,6 +205,7 @@ class RpcWireGoldenTests {
     fun webSocketCloseCodesMapToGrpcCodes() {
         assertEquals(Codes.OK, Status.fromWSCode(1000, null).code)
         assertEquals(Codes.UNAVAILABLE, Status.fromWSCode(1001, null).code)
+        assertEquals(Codes.OUT_OF_RANGE, Status.fromWSCode(1009, null).code)
         assertEquals(Codes.UNKNOWN, Status.fromWSCode(1006, null).code)
 
         // The 4000-4999 private range carries the gRPC code as an offset from 4000.
@@ -246,11 +247,12 @@ class RpcWireGoldenTests {
             assertEquals(code, Status.fromHTTPCode(code.toHttpCode(), "arbitrary detail", code.value.toString()).code)
             assertEquals(code, Status.fromWSCode(code.toWSCode(), "arbitrary detail").code)
         }
-        assertEquals(Codes.UNKNOWN, Status.fromHTTPCode(400, "internal", "garbage").code)
+        assertEquals(Codes.DATA_LOSS, Status.fromHTTPCode(400, "internal", "garbage").code)
         assertEquals(Codes.CLIENT_TIMEOUT, com.latenighthack.ktbuf.proto.nativeTransportCode("NSURLErrorDomain", -1001))
         assertEquals(Codes.CANCELLED, com.latenighthack.ktbuf.proto.nativeTransportCode("NSURLErrorDomain", -999))
         assertEquals(Codes.UNKNOWN, com.latenighthack.ktbuf.proto.nativeTransportCode("OtherDomain", 5))
         val safe = com.latenighthack.ktbuf.proto.safeWSReason("雪".repeat(100))
         assertEquals("雪".repeat(41), safe)
     }
+
 }

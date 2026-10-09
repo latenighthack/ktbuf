@@ -24,6 +24,7 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
         headers: Map<String, String>,
         request: ByteArray
     ): RpcResponse = lifecycle.call {
+        checkedRpcMessage(request)
         suspendCancellableCoroutine { continuation ->
             val path = if (useApiGateway) {
                 method.toApiGatewayPath(rpcHttpBaseUrl(serverPath))
@@ -51,12 +52,14 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
                 override fun onResponse(call: Call, response: Response) {
                     val result = runCatching {
                         response.use {
-                            if (response.code > 299 || response.code < 200) {
-                                val errorMessage = response.body!!.string()
-                                val status = Status.fromHTTPCode(response.code, errorMessage, response.header(RPC_STATUS_HEADER))
+                            val statusHeader = response.headers.values(RPC_STATUS_HEADER).takeIf { it.isNotEmpty() }?.joinToString(",")
+                            if (response.code > 299 || response.code < 200 ||
+                                (statusHeader != null && Status.fromHTTPCode(response.code, null, statusHeader).code != Codes.OK)) {
+                                val errorMessage = response.body!!.boundedBytes().decodeToString()
+                                val status = Status.fromHTTPCode(response.code, errorMessage, statusHeader)
                                 throw RpcResponseException(method.toPath(""), "POST", status.code, status.message, RuntimeException(errorMessage))
                             } else {
-                                RpcResponse(response.body!!.bytes(), response.headers.toMap())
+                                RpcResponse(response.body!!.boundedBytes(), response.headers.toMap())
                             }
                         }
                     }
@@ -181,4 +184,19 @@ actual class HttpRpcClient actual constructor(private val serverPath: String, pr
             }
         }
     }
+}
+
+private fun ResponseBody.boundedBytes(): ByteArray {
+    require(contentLength() <= MAX_RPC_MESSAGE_BYTES) { "RPC response exceeds 16 MiB limit" }
+    val output = java.io.ByteArrayOutputStream()
+    byteStream().use { input ->
+        val buffer = ByteArray(16 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            require(read <= MAX_RPC_MESSAGE_BYTES - output.size()) { "RPC response exceeds 16 MiB limit" }
+            output.write(buffer, 0, read)
+        }
+    }
+    return output.toByteArray()
 }

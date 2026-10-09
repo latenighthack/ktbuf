@@ -9,7 +9,8 @@ import org.w3c.xhr.*
 import kotlin.js.Promise
 
 private fun httpResult(url: String, method: String, status: Int, bytes: ByteArray, headers: Map<String,String>): RpcResponse {
-    if (status !in 200..299) {
+    val statusHeader = headers.rpcHeader(RPC_STATUS_HEADER)
+    if (status !in 200..299 || (statusHeader != null && Status.fromHTTPCode(status, null, statusHeader).code != Codes.OK)) {
         val error = Status.fromHTTPCode(status, bytes.decodeToString(), headers.rpcHeader(RPC_STATUS_HEADER))
         throw RpcResponseException(url, method, error.code, error.message)
     }

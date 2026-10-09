@@ -7,6 +7,9 @@ name: Runtime and generated consumers
     branches:
     - main
   workflow_call: {}
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:

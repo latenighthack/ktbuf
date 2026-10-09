@@ -2,6 +2,9 @@ package com.latenighthack.ktbuf.bytes
 
 import kotlin.math.min
 
+const val DEFAULT_BYTE_ARRAY_LIMIT: Int = 16 * 1024 * 1024
+class ByteArrayLimitException(message: String) : IllegalArgumentException(message)
+
 interface LinkedByteArray {
 
     val size: Int
@@ -45,6 +48,15 @@ fun LinkedByteArray(bufferSize: Int = ConcreteLinkedByteArray.defaultBufferSize)
 fun MutableLinkedByteArray(bufferSize: Int = ConcreteLinkedByteArray.defaultBufferSize): MutableLinkedByteArray {
     return ConcreteLinkedByteArray(bufferSize)
 }
+
+/** Explicit finite storage budget; existing one-argument entry points keep their ABI. */
+@Suppress("FunctionName")
+fun LinkedByteArray(bufferSize: Int = ConcreteLinkedByteArray.defaultBufferSize, maxSize: Int): LinkedByteArray =
+    ConcreteLinkedByteArray(bufferSize, maxSize)
+
+@Suppress("FunctionName")
+fun MutableLinkedByteArray(bufferSize: Int = ConcreteLinkedByteArray.defaultBufferSize, maxSize: Int): MutableLinkedByteArray =
+    ConcreteLinkedByteArray(bufferSize, maxSize)
 
 fun linkedByteArrayOf(vararg bytes: Byte): LinkedByteArray = mutableLinkedByteArrayOf(*bytes)
 

@@ -3,6 +3,10 @@ package com.latenighthack.ktbuf.server
 import com.latenighthack.ktbuf.ProtobufInputStream
 import com.latenighthack.ktbuf.ProtobufLimits
 import com.latenighthack.ktbuf.ProtobufLimitException
+import com.latenighthack.ktbuf.ProtobufOutputLimits
+import com.latenighthack.ktbuf.ProtobufOutputLimitException
+import com.latenighthack.ktbuf.bytes.ByteArrayLimitException
+import kotlinx.coroutines.CancellationException
 import com.latenighthack.ktbuf.bytes.MutableLinkedByteArray
 import com.latenighthack.ktbuf.proto.Codes
 import io.ktor.utils.io.*
@@ -17,7 +21,6 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.channelFlow
@@ -83,7 +86,7 @@ public fun <Server: Any> Routing.serveUnary(
             val handler = methodDescriptor.handler as ServerMethod.Unary
 
             val outgoing = handler.handler.invoke(server, context, request)
-            val outStream = ProtobufOutputStream()
+            val outStream = ProtobufOutputStream(limits = ProtobufOutputLimits(limits.maxMessageBytes, limits.maxDepth, limits.maxWork))
 
             outStream.write { writer ->
                 methodDescriptor.responseSerializer.invoke(writer, outgoing)
@@ -91,9 +94,16 @@ public fun <Server: Any> Routing.serveUnary(
 
             val outgoingBytes = outStream.toByteArray()
 
+            call.rpcStatusHeader(Codes.OK)
             call.respond(outgoingBytes)
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (limit: ProtobufOutputLimitException) {
+            call.response.headers.append(RPC_STATUS_HEADER, Codes.OUT_OF_RANGE.value.toString())
+            call.respondText("Response exceeds encoding limits", status = HttpStatusCode.BadRequest)
+        } catch (limit: ByteArrayLimitException) {
+            call.response.headers.append(RPC_STATUS_HEADER, Codes.OUT_OF_RANGE.value.toString())
+            call.respondText("Protobuf buffer exceeds byte limits", status = HttpStatusCode.BadRequest)
         } catch (limit: ProtobufLimitException) {
             call.response.headers.append(RPC_STATUS_HEADER, Codes.RESOURCE_EXHAUSTED.value.toString())
             call.respondText("Request exceeds decoding limits", status = HttpStatusCode.TooManyRequests)
@@ -135,7 +145,7 @@ public fun <Server: Any> Routing.serveStreamingOut(
             (methodDescriptor.handler as ServerMethod.ServerStreaming).handler.invoke(server, context, request)
                 .takeWhile { it !is StreamControlEvent.Close<*> }
                 .collect { event ->
-                    val outStream = ProtobufOutputStream()
+                    val outStream = ProtobufOutputStream(limits = ProtobufOutputLimits(limits.maxMessageBytes, limits.maxDepth, limits.maxWork))
 
                     when (event) {
                         is StreamControlEvent.Close<*> -> {
@@ -157,6 +167,10 @@ public fun <Server: Any> Routing.serveStreamingOut(
             close(CloseReason(CloseReason.Codes.NORMAL, ""))
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (limit: ProtobufOutputLimitException) {
+            close(reason = CloseReason(4011.toShort(), "Response exceeds encoding limits"))
+        } catch (limit: ByteArrayLimitException) {
+            close(reason = CloseReason(4011.toShort(), "Protobuf buffer exceeds byte limits"))
         } catch (limit: ProtobufLimitException) {
             close(reason = CloseReason(4008.toShort(), "Request exceeds decoding limits"))
         } catch (rpcException: RpcResponseException) {
@@ -211,7 +225,7 @@ public fun <Server: Any> Routing.serveStreamingInOut(
                     when (event) {
                         is StreamControlEvent.Close<*> -> close()
                         is StreamControlEvent.Message<*> -> {
-                            val output = ProtobufOutputStream()
+                            val output = ProtobufOutputStream(limits = ProtobufOutputLimits(limits.maxMessageBytes, limits.maxDepth, limits.maxWork))
                             output.write { methodDescriptor.responseSerializer.invoke(it, event.message) }
                             send(output.toByteArray())
                         }
@@ -220,6 +234,10 @@ public fun <Server: Any> Routing.serveStreamingInOut(
                 close(CloseReason(CloseReason.Codes.NORMAL, ""))
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (limit: ProtobufOutputLimitException) {
+                close(CloseReason(4011.toShort(), "Response exceeds encoding limits"))
+            } catch (limit: ByteArrayLimitException) {
+                close(CloseReason(4011.toShort(), "Protobuf buffer exceeds byte limits"))
             } catch (limit: ProtobufLimitException) {
                 close(CloseReason(4008.toShort(), "Request exceeds decoding limits"))
             } catch (rpcException: RpcResponseException) {
@@ -234,7 +252,7 @@ public fun <Server: Any> Routing.serveStreamingInOut(
 
 private suspend fun ApplicationCall.readBoundedBody(limit: Int): ByteArray {
     val channel = receiveChannel()
-    val bytes = MutableLinkedByteArray(minOf(8192, limit))
+    val bytes = MutableLinkedByteArray(minOf(8192, limit), maxSize = limit)
     val chunk = ByteArray(8192)
     while (true) {
         val count = channel.readAvailable(chunk)
@@ -257,4 +275,9 @@ private fun <T> decodeRequest(bytes: ByteArray, limits: ProtobufLimits, parser: 
     } catch (malformed: IndexOutOfBoundsException) {
         throw RpcResponseException("", "DECODE", Codes.INVALID_ARGUMENT, "Malformed protobuf request", malformed)
     }
+}
+
+private fun ApplicationCall.rpcStatusHeader(code: Codes) {
+    response.headers.append(RPC_STATUS_HEADER, code.value.toString())
+    response.headers.append(HttpHeaders.AccessControlExposeHeaders, RPC_STATUS_HEADER)
 }

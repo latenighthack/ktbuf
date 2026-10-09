@@ -68,6 +68,7 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
 
                         bytes
                     } catch (ex: ClosedReceiveChannelException) {
+                        streamCloseFailure(ex)?.let { throw it }
                         return@serverStreamingCall
                     }
 
@@ -190,4 +191,14 @@ open class GrpcService(private val rpc: RpcClient, private val packageName: Stri
             requests.cancel()
         }
     }
+}
+
+/** Coroutine stacktrace recovery can wrap a normal closed-channel exception as its own cause. */
+private fun streamCloseFailure(closed: ClosedReceiveChannelException): Throwable? {
+    var cause: Throwable? = closed.cause
+    repeat(64) {
+        if (cause !is ClosedReceiveChannelException) return cause
+        cause = cause?.cause
+    }
+    return cause
 }

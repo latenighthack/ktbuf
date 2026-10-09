@@ -42,8 +42,14 @@ data class Status(val code: Codes, val message: String) {
 }
 
 // https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
-fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?, statusHeader: String? = null): Status {
-    val code = if (statusHeader != null) Codes.from(statusHeader.toIntOrNull() ?: -1) else when (httpCode) {
+fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?): Status = fromHTTPCode(httpCode, message, null)
+
+/** Exact metadata disambiguates shared HTTP statuses; malformed or contradictory metadata is a protocol error. */
+fun Status.Companion.fromHTTPCode(httpCode: Int, message: String?, statusHeader: String?): Status {
+    val code = if (statusHeader != null) {
+        val value = statusHeader.takeIf { it.isNotEmpty() && it.all { char -> char in '0'..'9' } }?.toIntOrNull()
+        Codes.entries.firstOrNull { it.value == value }?.takeIf { it.toHttpCode() == httpCode } ?: Codes.DATA_LOSS
+    } else when (httpCode) {
         200 -> Codes.OK
         400 -> {
             val lowerMessage = message?.lowercase()
@@ -115,6 +121,7 @@ fun Status.Companion.fromWSCode(wsCode: Int, message: String?): Status {
     val code = when (wsCode) {
         1000 -> Codes.OK
         1001 -> Codes.UNAVAILABLE
+        1009 -> Codes.OUT_OF_RANGE
         in 4000 until 5000 -> {
             val codeVal = wsCode - 4000
             Codes.values().firstOrNull { it.value == codeVal } ?: Codes.UNKNOWN
@@ -127,7 +134,8 @@ fun Status.Companion.fromWSCode(wsCode: Int, message: String?): Status {
 
 /** Explicit status metadata prevents ambiguous HTTP statuses from depending on message text. */
 const val RPC_STATUS_HEADER = "grpc-status"
-fun Map<String, String>.rpcHeader(name: String): String? = entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+fun Map<String, String>.rpcHeader(name: String): String? = entries.filter { it.key.equals(name, ignoreCase = true) }
+    .takeIf { it.isNotEmpty() }?.joinToString(",") { it.value }
 fun Codes.toWSCode(): Int = if (this == Codes.OK) 1000 else 4000 + value
 
 /** RFC 6455 reserves two bytes of a 125-byte control frame for its close code. */
