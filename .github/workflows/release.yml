@@ -39,8 +39,8 @@ jobs:
           fi
 
       - name: Publish and release
-        # :patch is excluded — its protoc plugin (protoc-gen-kt-patch) no longer exists and
-        # nothing consumes ktbuf-patch; the published set matches what consumers use.
+        # :patch remains outside the external release set; its fixtures use the
+        # same private pinned generator when locally validated.
         run: ./gradlew :library:publishToMavenCentral :rpc:publishToMavenCentral :server:publishToMavenCentral :test:publishToMavenCentral --no-configuration-cache --stacktrace
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}

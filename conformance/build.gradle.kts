@@ -16,60 +16,25 @@ plugins {
 val protoSourceDir = layout.projectDirectory.dir("src/commonMain/proto")
 val protoOutputDir = layout.buildDirectory.dir("generated/proto/kotlin")
 
-val generateProtoKotlin = tasks.register("generateProtoKotlin") {
-    description = "Generates Kotlin sources from src/commonMain/proto using protoc-gen-kt."
+apply(from = rootProject.file("gradle/pinned-protoc.gradle.kts"))
+val protoc = configurations.named("codegenProtoc")
+val generator = layout.buildDirectory.file("tools/protoc-gen-kt" + if (System.getProperty("os.name").lowercase().contains("win")) ".exe" else "")
+val generateProtoKotlin = tasks.register<Exec>("generateProtoKotlin") {
+    description = "Generate fixtures with pinned protoc and the reviewed private generator"
     group = "build"
-
-    val inputDir = protoSourceDir.asFile
-    val outputDir = protoOutputDir
-
-    inputs.dir(inputDir).withPropertyName("protoSources")
-    outputs.dir(outputDir).withPropertyName("generatedSources")
-
-    doLast {
-        val target = outputDir.get().asFile
-
-        target.deleteRecursively()
-        target.mkdirs()
-
-        val protoFiles = inputDir.walkTopDown()
-            .filter { it.isFile && it.extension == "proto" }
-            .map { it.absolutePath }
-            .toList()
-
-        require(protoFiles.isNotEmpty()) { "no .proto files found in $inputDir" }
-
-        // protoc discovers the `kt` plugin by looking for `protoc-gen-kt` on PATH.
-        val result = providers.exec {
-            commandLine(
-                buildList {
-                    add("protoc")
-                    add("--kt_out=${target.absolutePath}")
-                    add("-I")
-                    add(inputDir.absolutePath)
-                    addAll(protoFiles)
-                }
-            )
-            isIgnoreExitValue = true
-        }
-
-        val exitCode = result.result.get().exitValue
-
-        if (exitCode != 0) {
-            val stderr = result.standardError.asText.get().trim()
-
-            throw GradleException(
-                buildString {
-                    appendLine("protoc failed with exit code $exitCode.")
-                    if (stderr.isNotEmpty()) appendLine(stderr)
-                    appendLine()
-                    appendLine("This module needs both `protoc` and the `protoc-gen-kt` plugin on PATH:")
-                    appendLine("  brew install protobuf")
-                    appendLine("  go install latenighthack.com/protoc-gen-kt@latest")
-                    append("  export PATH=\"\$(go env GOPATH)/bin:\$PATH\"")
-                }
-            )
-        }
+    dependsOn(tasks.named("installProtocGenKt"))
+    inputs.dir(protoSourceDir).withPropertyName("protoSources")
+    inputs.files(protoc)
+    inputs.file(generator)
+    inputs.property("protocVersion", providers.gradleProperty("codegenProtocVersion"))
+    outputs.dir(protoOutputDir).withPropertyName("generatedSources")
+    doFirst {
+        val target = protoOutputDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val executable = protoc.get().singleFile.apply { setExecutable(true) }
+        val files = protoSourceDir.asFile.walkTopDown().filter { it.isFile && it.extension == "proto" }.sortedBy { it.path }.map { it.absolutePath }.toList()
+        require(files.isNotEmpty()) { "No .proto inputs" }
+        commandLine(listOf(executable.absolutePath, "--plugin=protoc-gen-kt=${generator.get().asFile.absolutePath}",
+            "--kt_out=${target.absolutePath}", "-I", protoSourceDir.asFile.absolutePath) + files)
     }
 }
 
