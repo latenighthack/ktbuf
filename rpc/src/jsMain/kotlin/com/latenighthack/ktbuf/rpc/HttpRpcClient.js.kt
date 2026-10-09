@@ -28,16 +28,7 @@ internal fun XMLHttpRequest.errorBodyText(): String {
 
 private fun statusHandler(xhr: XMLHttpRequest, coroutineContext: Continuation<RpcResponse>) {
     if (xhr.readyState == XMLHttpRequest.DONE) {
-        val headers = xhr.getAllResponseHeaders()
-            .split("\r\n").associate {
-                val parts = it.split(":", limit = 1)
-
-                if (parts.size > 1) {
-                    parts[0] to parts[1]
-                } else {
-                    parts[0] to ""
-                }
-            }
+        val headers = parseResponseHeaders(xhr.getAllResponseHeaders())
 
         if (xhr.status / 100 == 2) {
             coroutineContext.resume(RpcResponse(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>(), headers))

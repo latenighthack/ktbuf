@@ -15,16 +15,6 @@ import kotlin.coroutines.suspendCoroutine
 
 private fun statusHandler(method: String, xhr: XMLHttpRequest, coroutineContext: Continuation<ByteArray>) {
     if (xhr.readyState == XMLHttpRequest.DONE) {
-        val headers = xhr.getAllResponseHeaders()
-            .split("\r\n").associate {
-                val parts = it.split(":", limit = 1)
-
-                if (parts.size > 1) {
-                    parts[0] to parts[1]
-                } else {
-                    parts[0] to ""
-                }
-            }
 
         if (xhr.status / 100 == 2) {
             coroutineContext.resume(Int8Array(xhr.response as ArrayBuffer).unsafeCast<ByteArray>())

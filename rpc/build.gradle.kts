@@ -1,5 +1,11 @@
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest
+import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
+import org.gradle.api.services.BuildService
+import org.gradle.api.services.BuildServiceParameters
+import org.gradle.api.file.RegularFileProperty
+import java.util.concurrent.TimeUnit
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -7,12 +13,54 @@ plugins {
     id("com.vanniktech.maven.publish.base")
 }
 
+abstract class TransportPeerService : BuildService<TransportPeerService.Parameters>, AutoCloseable {
+    interface Parameters : BuildServiceParameters { val script: RegularFileProperty }
+    private var process: Process? = null
+    private var address: String? = null
+    @Synchronized fun url(): String {
+        if (address == null) {
+            val child = ProcessBuilder("python3", "-u", parameters.script.get().asFile.absolutePath).redirectError(ProcessBuilder.Redirect.INHERIT).start()
+            process = child
+            address = checkNotNull(child.inputStream.bufferedReader().readLine()) { "Transport fixture failed to start" }
+        }
+        return checkNotNull(address)
+    }
+    override fun close() {
+        process?.let { it.destroy(); if (!it.waitFor(3, TimeUnit.SECONDS)) it.destroyForcibly() }
+    }
+}
+val transportPeer = gradle.sharedServices.registerIfAbsent("ktbufTransportPeer", TransportPeerService::class) {
+    parameters.script.set(layout.projectDirectory.file("src/testFixtures/transport_peer.py"))
+}
+tasks.withType<KotlinJsTest>().configureEach {
+    usesService(transportPeer)
+    inputs.file(layout.projectDirectory.file("src/testFixtures/transport_peer.py"))
+    outputs.upToDateWhen { false }
+    doFirst {
+        val url = transportPeer.get().url()
+        environment("KTBUF_PEER_URL", url)
+        rootProject.layout.buildDirectory.file("transport-peer-url.txt").get().asFile.apply { parentFile.mkdirs(); writeText(url) }
+    }
+}
+tasks.withType<KotlinNativeTest>().configureEach {
+    if (name.startsWith("macos")) {
+        usesService(transportPeer)
+    inputs.file(layout.projectDirectory.file("src/testFixtures/transport_peer.py"))
+    outputs.upToDateWhen { false }
+        doFirst {
+        val url = transportPeer.get().url()
+        environment("KTBUF_PEER_URL", url)
+        rootProject.layout.buildDirectory.file("transport-peer-url.txt").get().asFile.apply { parentFile.mkdirs(); writeText(url) }
+    }
+    }
+}
+
 kotlin {
     jvm {
     }
     js {
-        browser()
-        nodejs()
+        browser { testTask { useKarma { useChromeHeadless() } } }
+        nodejs { testTask { useMocha { timeout = "10s" } } }
     }
     androidTarget {
         publishLibraryVariants("release")
